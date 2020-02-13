@@ -5,14 +5,14 @@ output: html_notebook
 
 ```{r}
 library(tidyverse)
+library(knitr)
 ```
-
 
 Read in data:
 
 ```{r}
 attachments <- read_csv("data/attachments.csv")
-seqinfo <- read_csv("data/seqinfo.csv")
+seqinfo <- read_csv("data/sequences.csv")
 jobs <- read_csv("data/jobs.csv")
 ```
 
@@ -22,11 +22,38 @@ Here's a list of all the sequences in this project:
 
 ```{r}
 sequences <- seqinfo %>%
-  pull(series_description) %>%
-  unique() %>%
-  sort()
+  pull(protocol_name) %>% 
+  table()  %>%
+  as.data.frame() %>%
+  arrange(-Freq)
 
-cat(sequences, sep = "\n")
+kable(sequences)
+```
+
+```{r}
+sequence_table <- seqinfo
+seq_ns <- unique(sequence_table$series_description)
+seq_ns <- seq_ns[-4]
+seq_ns <- as.character(seq_ns)
+sequence_table$patient_id <- as.character(sequence_table$patient_id)
+audit <- data.frame(matrix(rep(0, 10305), ncol = 45, nrow = 229))
+colnames(audit) <- seq_ns
+rownames(audit) <- unique(sequence_table$patient_id)
+for (x in seq_ns){
+  n <- sequence_table %>% 
+    filter(str_detect(series_description, x)) 
+  have_it <- unique(n$patient_id)
+  
+  for (i in rownames(audit)){
+    if (i %in% have_it){
+      audit[i,x] <- c(1)
+    }
+    else{
+      audit[i,x] <- c(0)
+    }
+  }
+}
+audit
 ```
 
 Below we visualise how these sequences are spread amongst the participants:
@@ -44,9 +71,14 @@ find_missingness <- function(seqinfo){
     unique() %>%
     sort()
   
-  plot_table <- data.frame()
+  plot_table <- data.frame(subjects=subjects)
   
   for(s in sequences){
+    
+    # seqinfo %>%
+    #   group_by(patient_id) %>%
+    #   mutate(sequence_present = ifelse())
+    
     
     present <- seqinfo %>%
       filter(str_detect(series_description, s)) %>%
