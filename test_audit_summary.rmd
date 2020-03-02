@@ -1,110 +1,159 @@
 ---
-title: "FLAUDIT: Flywheel Project Audit"
-output: html_notebook
+title: 'FLAUDIT: Flywheel Project Audit'
+output:
+  html_document:
+    df_print: paged
 ---
 
-```{r}
+```{r, include = FALSE, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE, fig.width=16, fig.height=12)
 library(tidyverse)
 library(knitr)
+library(scales)
+library(ggrepel)
+library(wordcloud)
+library(DT)
+library(naniar)
+library(gdata)
+library(lubridate)
+library(collapsibleTree)
 ```
 
-Read in data:
-
-```{r}
-attachments <- read_csv("data/attachments.csv")
-seqinfo <- read_csv("data/sequences.csv")
+```{r, include = FALSE, echo = FALSE}
+attachments <- read_csv("data/attachments.csv") %>%
+  filter(!str_detect(Type, "bvec|bval")) %>%
+  filter(!(str_detect(Name, "json") & str_detect(Origin_Level, "Acquisition")))
+seqinfo <- read_csv("data/seqinfo.csv") %>%
+  filter(!is.na(series_description))
 jobs <- read_csv("data/jobs.csv")
 ```
 
-# Sequences & Missingness
+# Sequences
 
 Here's a list of all the sequences in this project:
 
-```{r}
+```{r, warning=FALSE, echo=FALSE}
 sequences <- seqinfo %>%
   pull(protocol_name) %>% 
   table()  %>%
   as.data.frame() %>%
   arrange(-Freq)
 
-kable(sequences)
+wordcloud(sequences$., sequences$Freq, min.freq = 0, scale = c(1, 2), random.order = TRUE)
 ```
 
-```{r}
-sequence_table <- seqinfo
-seq_ns <- unique(sequence_table$series_description)
-seq_ns <- seq_ns[-4]
-seq_ns <- as.character(seq_ns)
-sequence_table$patient_id <- as.character(sequence_table$patient_id)
-audit <- data.frame(matrix(rep(0, 10305), ncol = 45, nrow = 229))
-colnames(audit) <- seq_ns
-rownames(audit) <- unique(sequence_table$patient_id)
-for (x in seq_ns){
-  n <- sequence_table %>% 
-    filter(str_detect(series_description, x)) 
-  have_it <- unique(n$patient_id)
-  
-  for (i in rownames(audit)){
-    if (i %in% have_it){
-      audit[i,x] <- c(1)
-    }
-    else{
-      audit[i,x] <- c(0)
-    }
-  }
-}
-audit
+```{r, echo=FALSE}
+datatable(sequences)
 ```
 
-Below we visualise how these sequences are spread amongst the participants:
+The tree diagram below shows how each sequence is curated into BIDS format. The leaf at the end of each branch counts how many individual files fall under each BIDS template.
 
-```{r}
-find_missingness <- function(seqinfo){
-  
-  sequences <- seqinfo %>%
-    pull(series_description) %>%
-    unique() %>%
-    sort()
-  
-  subjects <- seqinfo %>%
-    pull(patient_id) %>%
-    unique() %>%
-    sort()
-  
-  plot_table <- data.frame(subjects=subjects)
-  
-  for(s in sequences){
+```{r, echo = FALSE}
+seqinfo %>%
+  mutate(
+    bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
+    bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
+  ) %>%
+  group_by(series_description, Folder, Modality, bids_name) %>%
+  summarise(n = n()) %>%
+  mutate(
+    n = ifelse(is.na(Folder), 0, n),
     
-    # seqinfo %>%
-    #   group_by(patient_id) %>%
-    #   mutate(sequence_present = ifelse())
+  ) %>%
+  collapsibleTreeSummary(., 
+    c("series_description", "Folder", "Modality", "bids_name"),
+    attribute = "n", root = 'project_label', width = 1000, height = 800, zoomable = TRUE
+  )
+```
+
+
+Below, we visualise the missingness of sequences across all the subjects in the project:
+```{r, echo=FALSE}
+seq_ns <- unique(seqinfo$series_description)
+ids <- unique(seqinfo$patient_id)
+output_df <- data.frame(matrix(data = 0, ncol = length(seq_ns), nrow = length(ids)))
+
+names(output_df) <- seq_ns
+
+for(i in 1:length(ids)){
+  
+  df <- seqinfo %>%
+    filter(patient_id == ids[i])
+  
+  for(row in 1:nrow(df)){
     
     
-    present <- seqinfo %>%
-      filter(str_detect(series_description, s)) %>%
-      pull(patient_id) %>%
-      unique()
+    target <- df$series_description[row]
     
-    plot_table <- subjects %in% present %>%
-      table() %>%
-      prop.table() %>%
-      as.data.frame() %>%
-      cbind(s, .) %>%
-      rename(., 'present' = `.`) %>%
-      rbind(plot_table, .)
-      
+    output_df[i, target] <- output_df[i, target] + 1
   }
   
-  return(plot_table)
 }
 
-find_missingness(seqinfo) %>%
-  mutate(Freq = Freq *100) %>%
-  ggplot(aes(x=s, y=Freq)) +
-  geom_col(position = 'stack', aes(fill = present)) +
-  theme_minimal() +
+output_df %>%
+  mutate_all(.funs = function(x) ifelse(x == 0, NA, x)) %>%
+  gg_miss_var(show_pct = TRUE) +
+  labs(x = "Sequence") +
+  theme_minimal(base_size = 18)
+```
+
+# Gears and Jobs
+
+There have been `r length(unique(jobs$job_id))` gears run in total, for a total of `r as.character(lubridate::as.duration(sum(jobs$run_runtime_ms)/1000))`. The most commonly run gear is ``r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(gear_name) %>% .[1]`` with a total of `r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(n) %>% .[1]` runs. The gear with the most version increments is ``r jobs %>% group_by(gear_name) %>% summarise(n = n_distinct(gear_version)) %>% arrange(-n) %>% pull(gear_name) %>% .[1]``.
+
+Here are the gear completion statistics:
+
+```{r, echo=FALSE}
+jobs_plot <- jobs %>%
+  # mutate(run_status = factor(run_status)) %>%
+  group_by(job_id) %>%
+  arrange(run_status) %>%
+  filter(row_number() == 1) %>%
+  group_by(gear_name, run_status) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n),
+         perc = percent(freq, accuracy = 1),
+         cumsum = cumsum(n)) %>%
+  ungroup() %>%
+  # mutate(perc = ifelse(freq < 0.2, "", perc)) %>%
+  ggplot(aes(x=gear_name, y=n, group = run_status)) +
+    geom_bar(aes(fill=run_status), stat = 'identity', position = "dodge") +
+    theme_minimal(base_size = 18) +
+    scale_fill_viridis_d() +
+    geom_label_repel(aes(label = perc, y=n), force = 5, position = position_dodge(0.5)) +
+    coord_flip() +
+    labs(title = "Gear Runs & Completion Rate", x = "Gear Label") +
+    NULL
+    
+jobs_plot
+```
+
+# Gear Runtime
+
+Below are the runtimes of gear runs:
+
+```{r, echo=FALSE}
+jobs %>%
+  mutate(run_runtime_ms = run_runtime_ms/1000/60) %>%
+  #group_by(gear_name) %>%
+  ggplot(aes(x=run_runtime_ms)) +
+    geom_histogram(aes(fill = run_status), alpha = 0.5, bins = 25) +
+    theme_minimal(base_size = 18) +
+    scale_fill_viridis_d() +
+    labs(title = "Gear Runtimes", x = "Runtime in Minutes") +
+    facet_wrap(~gear_name, scales = "free")
+```
+
+# Attachments
+
+There are `r nrow(attachments)` attachments for a total of `r humanReadable(sum(attachments$Size_kb), width=4, standard = "SI")` of data. 
+```{r, echo=FALSE}
+attachments %>%
+  ggplot(aes(x=Type)) +
+  geom_bar(aes(fill = Origin_Level), alpha = 0.5) +
+  theme_minimal(base_size = 18) +
   scale_fill_viridis_d() +
-  coord_flip() #+
-  #theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  labs(title = "Attachments Count")# +
+  #facet_wrap(~gear_name, scales = "free")
 ```
 

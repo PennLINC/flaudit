@@ -2,11 +2,13 @@ import flywheel
 import logging
 import warnings
 import argparse
+import os
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 from fw_heudiconv.cli import tabulate
+from fw_heudiconv.cli.export import get_nested
 
-fw  = flywheel.Client()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('flaudit')
@@ -57,7 +59,7 @@ def gather_jobs(sessions_list, verbose):
     '''
     logger.info("Collecting gear run information...")
     df = pd.DataFrame()
-    for sess in sessions_list:
+    for sess in tqdm(sessions_list):
 
         if len(sess.analyses) < 1:
 
@@ -90,7 +92,7 @@ def gather_jobs(sessions_list, verbose):
                     'gear_version': al.gear_info['version'],
                     'run_label': al.label,
                     'run_datetime': al.job['created'],
-                    'run_runtime_mins': al.job.profile['elapsed_time_ms'],
+                    'run_runtime_ms': al.job.profile['elapsed_time_ms'],
                     'run_status': al.job.state
                 }
 
@@ -135,6 +137,53 @@ def gather_jobs(sessions_list, verbose):
     return(df)
 
 
+def get_bids_from_acq(client, id):
+    
+    acq = client.get(id)
+    niftis = [x for x in acq.files if x.type in ['nifti', 'bval', 'bvec']]
+    
+    if not niftis:
+        return None
+    else:
+        
+        rows = []
+        
+        for nii in niftis:
+            
+            rows.append(get_nested(nii, 'info', 'BIDS'))
+            
+        return rows
+     
+
+def gather_bids_for_seqs(client, df):
+    
+    bids_df = pd.DataFrame(
+        #columns = [
+        #'series_id', 'Task', 'Run', 'error_message', 'Ce', 'Filename', 
+        #'Filename', 'ignore', 'Acq', 'valid', 'template',
+        #'Rec', 'Path', 'Folder', 'Echo', 'Modality', 'Dir', 'Mod'
+        #]
+    )
+    
+    df2 = df.copy()
+    
+    for index, row in tqdm(df.iterrows()):
+        #print(row['series_id'])
+        bids = get_bids_from_acq(client, row['series_id'])
+        bids = [x for x in bids if x is not None and x != 'NA']
+        
+        if bids:
+            
+            bids_df_temp = pd.DataFrame(bids)
+            bids_df_temp['series_id'] = row['series_id']
+            
+            bids_df = pd.concat([bids_df, bids_df_temp], sort=False)
+    
+    return pd.merge(bids_df, df2, on='series_id')
+        
+            
+    
+
 def gather_seqInfo(client, project_label, subject_labels=None, session_labels=None, dry_run=False, unique=True):
     '''
     Runs fw-heudiconv-tabulate to attach sequence information to the gear jobs query
@@ -144,8 +193,10 @@ def gather_seqInfo(client, project_label, subject_labels=None, session_labels=No
 
     df = tabulate.tabulate_bids(client, project_label, subject_labels=subject_labels,
                   session_labels=session_labels, dry_run=False, unique=True)
-
-    return df
+    
+    df_out = gather_bids_for_seqs(client, df)
+    
+    return df_out
 
 
 def pull_attachments_from_object(obj):
@@ -257,3 +308,99 @@ def gather_attachments(client, project_label, project_level=True, subject_level=
                 attachments = pd.concat([attachments, df])
 
     return attachments
+
+
+def get_parser():
+
+    parser = argparse.ArgumentParser(
+        description="FLAUDIT: Flywheel Audit")
+    parser.add_argument(
+        "--project",
+        help="The project in Flywheel",
+        required=True
+    )
+    parser.add_argument(
+        "--subject",
+        help="The subject(s)",
+        nargs="+",
+        default=None,
+        type=str
+    )
+    parser.add_argument(
+        "--session",
+        help="The session(s)",
+        nargs="+",
+        default=None,
+        type=str
+    )
+    parser.add_argument(
+        "--destination",
+        help="Path to destination directory",
+        default=".",
+        type=str
+    )
+    parser.add_argument(
+        "--api-key",
+        help="API Key",
+        action='store',
+        default=None
+    )
+    parser.add_argument(
+        "--verbose",
+        help="Print ongoing messages of progress",
+        action='store_true',
+        default=False
+    )
+
+    return parser
+
+
+def main():
+
+    #logger.info("{:=^70}\n".format(": fw-heudiconv exporter starting up :"))
+    parser = get_parser()
+    args = parser.parse_args()
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        if args.api_key:
+            fw = flywheel.Client(args.api_key)
+        else:
+            fw = flywheel.Client()
+    assert fw, "Your Flywheel CLI credentials aren't set!"
+
+    destination = args.destination
+
+    if not os.path.exists(destination):
+        logger.info("Creating destination directory...")
+        os.makedirs(args.destination)
+    
+    logger.info("Gathering sessions...")
+    sessions = get_sessions(client=fw,
+                            project_label=args.project,
+                            session_labels=args.session,
+                            subject_labels=args.subject)
+                            
+    logger.info("Gathering sequences...")
+    seqinfo = gather_seqInfo(client=fw,
+                            project_label=args.project,
+                            session_labels=args.session,
+                            subject_labels=args.subject
+                            )
+                            
+    logger.info("Gathering jobs...")
+    jobs = gather_jobs(sessions_list=sessions, verbose=True)
+
+    logger.info("Gathering attachments...")
+    attachments = gather_attachments(client=fw, project_label=args.project)
+    
+    logger.info("Writing output data...")
+    seqinfo.to_csv("{}/seqinfo.csv".format(args.destination))
+    jobs.to_csv("{}/jobs.csv".format(args.destination))
+    attachments.to_csv("{}/attachments.csv".format(args.destination))
+    
+    logger.info("Done!")
+    #logger.info("{:=^70}".format(": Exiting fw-heudiconv exporter :"))
+
+if __name__ == '__main__':
+    main()
