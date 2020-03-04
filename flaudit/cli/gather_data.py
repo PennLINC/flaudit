@@ -140,6 +140,8 @@ def gather_jobs(sessions_list, verbose):
 def get_bids_from_acq(client, id):
     
     acq = client.get(id)
+    sess_lab = client.get(acq['parents']['session']).label
+    
     niftis = [x for x in acq.files if x.type in ['nifti', 'bval', 'bvec']]
     
     if not niftis:
@@ -152,7 +154,7 @@ def get_bids_from_acq(client, id):
             
             rows.append(get_nested(nii, 'info', 'BIDS'))
             
-        return rows
+        return sess_lab, rows
      
 
 def gather_bids_for_seqs(client, df):
@@ -169,13 +171,14 @@ def gather_bids_for_seqs(client, df):
     
     for index, row in tqdm(df.iterrows()):
         #print(row['series_id'])
-        bids = get_bids_from_acq(client, row['series_id'])
+        sess_lab, bids = get_bids_from_acq(client, row['series_id'])
         bids = [x for x in bids if x is not None and x != 'NA']
         
         if bids:
             
             bids_df_temp = pd.DataFrame(bids)
             bids_df_temp['series_id'] = row['series_id']
+            bids_df_temp['session_id'] = sess_lab
             
             bids_df = pd.concat([bids_df, bids_df_temp], sort=False)
     

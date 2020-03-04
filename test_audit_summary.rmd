@@ -17,6 +17,7 @@ library(naniar)
 library(gdata)
 library(lubridate)
 library(collapsibleTree)
+library(ggalluvial)
 ```
 
 ```{r, include = FALSE, echo = FALSE}
@@ -34,7 +35,7 @@ Here's a list of all the sequences in this project:
 
 ```{r, warning=FALSE, echo=FALSE}
 sequences <- seqinfo %>%
-  pull(protocol_name) %>% 
+  pull(series_description) %>% 
   table()  %>%
   as.data.frame() %>%
   arrange(-Freq)
@@ -46,28 +47,7 @@ wordcloud(sequences$., sequences$Freq, min.freq = 0, scale = c(1, 2), random.ord
 datatable(sequences)
 ```
 
-The tree diagram below shows how each sequence is curated into BIDS format. The leaf at the end of each branch counts how many individual files fall under each BIDS template.
-
-```{r, echo = FALSE}
-seqinfo %>%
-  mutate(
-    bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
-    bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
-  ) %>%
-  group_by(series_description, Folder, Modality, bids_name) %>%
-  summarise(n = n()) %>%
-  mutate(
-    n = ifelse(is.na(Folder), 0, n),
-    
-  ) %>%
-  collapsibleTreeSummary(., 
-    c("series_description", "Folder", "Modality", "bids_name"),
-    attribute = "n", root = 'project_label', width = 1000, height = 800, zoomable = TRUE
-  )
-```
-
-
-Below, we visualise the missingness of sequences across all the subjects in the project:
+And hence, the missingness of sequences across all the subjects in the project:
 ```{r, echo=FALSE}
 seq_ns <- unique(seqinfo$series_description)
 ids <- unique(seqinfo$patient_id)
@@ -95,6 +75,42 @@ output_df %>%
   gg_miss_var(show_pct = TRUE) +
   labs(x = "Sequence") +
   theme_minimal(base_size = 18)
+```
+
+The tree diagram below shows how each sequence has been curated into BIDS format. The leaf at the end of each branch counts how many subjects have files that fall under each BIDS template.
+
+```{r, echo = FALSE}
+seqinfo %>%
+  mutate(
+    bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
+    bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
+  ) %>%
+  group_by(series_description, Folder, Modality, bids_name, patient_id) %>%
+  summarise(`Number of Subjects` = n()) %>%
+  mutate(
+    `Number of Subjects` = ifelse(is.na(Folder), 0, `Number of Subjects`),
+    
+  ) %>%
+  collapsibleTreeSummary(., 
+    c("series_description", "Folder", "Modality", "bids_name"),
+    attribute = "Number of Subjects", root = 'project_label', width = 1000, height = 800, zoomable = TRUE
+  )
+```
+
+```{r, echo = FALSE}
+seqinfo %>%
+  mutate(
+    bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
+    bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
+  ) %>%
+  group_by(series_description, bids_name) %>%
+  summarise(Freq = n()) %>%
+  # mutate(
+  #   `Number of Subjects` = ifelse(is.na(Folder), 0, `Number of Subjects`),
+  #   
+  # ) %>%
+  arrange(-Freq) %>%
+  datatable()
 ```
 
 # Gears and Jobs
@@ -143,6 +159,101 @@ jobs %>%
     labs(title = "Gear Runtimes", x = "Runtime in Minutes") +
     facet_wrap(~gear_name, scales = "free")
 ```
+
+
+```{r}
+# create nodes for each gear
+
+gear_nodes <- jobs %>%
+  group_by(gear_name) %>%
+  summarise(n = n()) %>%
+  create_node_df(n = nrow(.), label = .$gear_name, data = .$n, type = 'lower', style = "filled")
+
+# create edges
+
+create_to_and_from <- function(df){
+  
+  if(nrow(df) <= 1){
+    
+    return(NA)
+  }
+  
+  else{
+    
+    top <- 1
+    bottom <- top + 1
+    end <- nrow(df)
+    
+    from_to <- list()
+    
+    while(bottom <= end){
+      
+      print(slice(df, top:bottom))
+      row <- c(
+        as.character(df[top, 'gear_name']), 
+        as.character(df[bottom, 'gear_name']),
+        "leading_to"
+        )
+      from_to[[top]] <- row
+      
+      top <- top + 1
+      bottom <- bottom + 1
+    }
+    
+    out_df <- do.call('rbind', from_to) %>%
+      as.data.frame(stringsAsFactors = FALSE)
+    
+    names(out_df) <- c("from", "to", "rel")
+    
+    return(out_df)
+  }
+}
+
+gear_edges <- jobs %>%
+  filter(run_status == "complete") %>%
+  arrange(subject, session) %>%
+  group_by(subject, session, gear_name, run_status) %>%
+  arrange(run_datetime) %>%
+  slice(1) %>%
+  select(subject, session, gear_name, run_datetime, run_status) %>%
+  group_by(subject, session) %>%
+  mutate(index = row_number()) %>%
+  nest() %>%
+  mutate(from_to = map(data, create_to_and_from)) %>%
+  unnest(from_to) %>%
+  filter(!is.na(rel)) %>%
+  ungroup() %>%
+  select(from, to, rel)
+
+for(x in 1:nrow(gear_edges)){
+  
+  
+  gear_edges$from[x] <- filter(gear_nodes, label == gear_edges$from[x]) %>%
+    pull(id)
+  gear_edges$to[x] <- filter(gear_nodes, label == gear_edges$to[x]) %>%
+    pull(id)
+
+}
+
+gear_edges <- mutate(gear_edges,
+                     from = as.numeric(from),
+                     to = as.numeric(to))
+
+create_graph(nodes_df = gear_nodes, edges_df = gear_edges) %>%
+  render_graph()
+```
+
+
+```{r}
+jobs %>%
+  #filter(run_status == "complete") %>%
+  group_by(subject, session, gear_name, run_status) %>%
+  
+  #summarise(n = n())
+  arrange(run_datetime) %>%
+  slice(1)
+```
+
 
 # Attachments
 
