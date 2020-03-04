@@ -3,10 +3,20 @@ title: 'FLAUDIT: Flywheel Project Audit'
 output:
   html_document:
     df_print: paged
+    
+params:
+  project_name: "gear_testing"
+  attachments_csv: "data/attachments.csv"
+  seqinfo_csv: "data/seqinfo.csv"
+  jobs_csv: "data/jobs.csv"
 ---
 
-```{r, include = FALSE, echo = FALSE}
+```{r, include = FALSE, echo = FALSE, cache = FALSE}
 knitr::opts_chunk$set(echo = FALSE, fig.width=16, fig.height=12)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+```{r, include = FALSE, echo = FALSE}
 library(tidyverse)
 library(knitr)
 library(scales)
@@ -18,20 +28,40 @@ library(gdata)
 library(lubridate)
 library(collapsibleTree)
 library(ggalluvial)
+#library(DiagrammeR)
+library(networkD3)
+
+ggplot_base <- 18
 ```
 
+## Project: `r params$project_name`
+
+## Number of Subjects:
+
+## Number of Sessions: 
+
+---
+
 ```{r, include = FALSE, echo = FALSE}
-attachments <- read_csv("data/attachments.csv") %>%
+
+current_dir <- getwd()
+
+attachments <- paste0(current_dir, "/", params$attachments_csv) %>%
+  read_csv() %>%
   filter(!str_detect(Type, "bvec|bval")) %>%
   filter(!(str_detect(Name, "json") & str_detect(Origin_Level, "Acquisition")))
-seqinfo <- read_csv("data/seqinfo.csv") %>%
+
+seqinfo <- paste0(current_dir, "/", params$seqinfo_csv) %>%
+  read_csv() %>%
   filter(!is.na(series_description))
-jobs <- read_csv("data/jobs.csv")
+
+jobs <- paste0(current_dir, "/", params$jobs_csv) %>%
+  read_csv()
 ```
 
 # Sequences
 
-Here's a list of all the sequences in this project:
+Here's a list of all the sequences in `r params$project_name`:
 
 ```{r, warning=FALSE, echo=FALSE}
 sequences <- seqinfo %>%
@@ -47,7 +77,18 @@ wordcloud(sequences$., sequences$Freq, min.freq = 0, scale = c(1, 2), random.ord
 datatable(sequences)
 ```
 
-And hence, the missingness of sequences across all the subjects in the project:
+We visualise the above frequencies below:
+
+```{r, echo = FALSE}
+ggplot(sequences, aes(x = ., y = Freq))+
+  geom_col() +
+  coord_flip() +
+  theme_minimal(base_size = ggplot_base) +
+  labs(title = "Raw Frequencies of Sequences in the Project", x = "Sequence Name")
+```
+
+And hence, the missingness of sequences across all the subjects in `r params$project_name`:
+
 ```{r, echo=FALSE}
 seq_ns <- unique(seqinfo$series_description)
 ids <- unique(seqinfo$patient_id)
@@ -74,9 +115,10 @@ output_df %>%
   mutate_all(.funs = function(x) ifelse(x == 0, NA, x)) %>%
   gg_miss_var(show_pct = TRUE) +
   labs(x = "Sequence") +
-  theme_minimal(base_size = 18)
+  theme_minimal(base_size = ggplot_base)
 ```
 
+# BIDS Curation
 The tree diagram below shows how each sequence has been curated into BIDS format. The leaf at the end of each branch counts how many subjects have files that fall under each BIDS template.
 
 ```{r, echo = FALSE}
@@ -117,6 +159,26 @@ seqinfo %>%
 
 There have been `r length(unique(jobs$job_id))` gears run in total, for a total of `r as.character(lubridate::as.duration(sum(jobs$run_runtime_ms)/1000))`. The most commonly run gear is ``r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(gear_name) %>% .[1]`` with a total of `r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(n) %>% .[1]` runs. The gear with the most version increments is ``r jobs %>% group_by(gear_name) %>% summarise(n = n_distinct(gear_version)) %>% arrange(-n) %>% pull(gear_name) %>% .[1]``.
 
+Here are the raw counts of complete gear runs, using only the most recent version and run of each gear:
+
+```{r, echo = FALSE}
+jobs %>%
+  filter(run_status == "complete") %>%
+  group_by(subject, session, gear_name) %>%
+  arrange(subject, session, gear_name, desc(run_datetime)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  group_by(gear_name) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(x=gear_name, y=n)) +
+    geom_col() +
+    theme_minimal(base_size = ggplot_base) +
+    coord_flip() +
+    labs(title = "Raw Count of Complete Gear Runs", x = "Gear Name") +
+    NULL
+```
+
+
 Here are the gear completion statistics:
 
 ```{r, echo=FALSE}
@@ -138,7 +200,7 @@ jobs_plot <- jobs %>%
     scale_fill_viridis_d() +
     geom_label_repel(aes(label = perc, y=n), force = 5, position = position_dodge(0.5)) +
     coord_flip() +
-    labs(title = "Gear Runs & Completion Rate", x = "Gear Label") +
+    labs(title = "Gear Runs & Completion Rate", x = "Gear Name") +
     NULL
     
 jobs_plot
@@ -160,14 +222,19 @@ jobs %>%
     facet_wrap(~gear_name, scales = "free")
 ```
 
+# Workflow of Curation & Analysis Gears
 
-```{r}
+Below, the Sankey Diagram illustrates the workflow of gear runs in your `r params$project_name`. An ideal workflow 
+
+```{r, echo = FALSE, fig.width=10, fig.height=7}
 # create nodes for each gear
 
 gear_nodes <- jobs %>%
   group_by(gear_name) %>%
   summarise(n = n()) %>%
-  create_node_df(n = nrow(.), label = .$gear_name, data = .$n, type = 'lower', style = "filled")
+  mutate(node = 0:(nrow(.)-1)) %>%
+  select(name = gear_name, node) %>%
+  as.data.frame()
 
 # create edges
 
@@ -188,11 +255,10 @@ create_to_and_from <- function(df){
     
     while(bottom <= end){
       
-      print(slice(df, top:bottom))
+      #print(slice(df, top:bottom))
       row <- c(
         as.character(df[top, 'gear_name']), 
-        as.character(df[bottom, 'gear_name']),
-        "leading_to"
+        as.character(df[bottom, 'gear_name'])
         )
       from_to[[top]] <- row
       
@@ -203,7 +269,7 @@ create_to_and_from <- function(df){
     out_df <- do.call('rbind', from_to) %>%
       as.data.frame(stringsAsFactors = FALSE)
     
-    names(out_df) <- c("from", "to", "rel")
+    names(out_df) <- c("from", "to")
     
     return(out_df)
   }
@@ -221,39 +287,20 @@ gear_edges <- jobs %>%
   nest() %>%
   mutate(from_to = map(data, create_to_and_from)) %>%
   unnest(from_to) %>%
-  filter(!is.na(rel)) %>%
+  #filter(!is.na(rel)) %>%
   ungroup() %>%
-  select(from, to, rel)
+  group_by(from, to) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  drop_na()
 
-for(x in 1:nrow(gear_edges)){
-  
-  
-  gear_edges$from[x] <- filter(gear_nodes, label == gear_edges$from[x]) %>%
-    pull(id)
-  gear_edges$to[x] <- filter(gear_nodes, label == gear_edges$to[x]) %>%
-    pull(id)
+gear_edges <- gear_edges %>%
+  mutate(fromID = match(gear_edges$from, gear_nodes$name) - 1,
+         toID = match(gear_edges$to, gear_nodes$name) - 1) %>%
+  as.data.frame()
 
-}
-
-gear_edges <- mutate(gear_edges,
-                     from = as.numeric(from),
-                     to = as.numeric(to))
-
-create_graph(nodes_df = gear_nodes, edges_df = gear_edges) %>%
-  render_graph()
+sankeyNetwork(Links = gear_edges, Nodes = gear_nodes, Source = "fromID", Target = "toID", Value = "n")
 ```
-
-
-```{r}
-jobs %>%
-  #filter(run_status == "complete") %>%
-  group_by(subject, session, gear_name, run_status) %>%
-  
-  #summarise(n = n())
-  arrange(run_datetime) %>%
-  slice(1)
-```
-
 
 # Attachments
 
