@@ -1,0 +1,9 @@
+.git
+.ipynb_checkpoints
+*.Rproj
+package-lock.json
+.Rhistory
+data
+Dockerfile
+.DS_Store
+.gitignore
