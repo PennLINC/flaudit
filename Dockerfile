@@ -31,6 +31,8 @@ COPY manifest.json ${FLYWHEEL}/manifest.json
 # install necessary packages for python
 RUN python3 -m pip install --upgrade pip
 RUN pip install --no-cache nipype
+RUN pip install --no-cache pandas
+RUN pip install --no-cache tqdm
 RUN pip install --no-cache flywheel-sdk==11.*
 RUN pip install --no-cache fw-heudiconv
 

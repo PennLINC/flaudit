@@ -33,14 +33,6 @@ library(networkD3)
 ggplot_base <- 18
 ```
 
-## Project: `r params$project_name`
-
-## Number of Subjects:
-
-## Number of Sessions: 
-
----
-
 ```{r, include = FALSE, echo = FALSE}
 
 current_dir <- getwd()
@@ -57,6 +49,14 @@ seqinfo <- paste0(current_dir, "/", params$seqinfo_csv) %>%
 jobs <- paste0(current_dir, "/", params$jobs_csv) %>%
   read_csv()
 ```
+
+## Project: `r params$project_name`
+
+## Number of Subjects: `r length(unique(seqinfo$patient_id))`
+
+## Number of Sessions: `r nrow(distinct(seqinfo, patient_id, session_id))`
+
+---
 
 # Sequences
 
@@ -223,7 +223,7 @@ jobs %>%
 
 # Workflow of Curation & Analysis Gears
 
-Below, the Sankey Diagram illustrates the workflow of gear runs in your `r params$project_name`. An ideal workflow 
+Below, the Sankey Diagram illustrates the workflow of gear runs in your project `r params$project_name`.
 
 ```{r, echo = FALSE, fig.width=10, fig.height=7}
 # create nodes for each gear
@@ -299,6 +299,11 @@ gear_edges <- gear_edges %>%
   as.data.frame()
 
 sankeyNetwork(Links = gear_edges, Nodes = gear_nodes, Source = "fromID", Target = "toID", Value = "n")
+```
+
+
+```{r}
+
 ```
 
 # Attachments

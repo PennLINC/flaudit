@@ -20,5 +20,5 @@ project_label = "gear_testing" # project_label = project_container.label
 call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/".format(project_label.replace(" ", "\ "))
 print(call1)
 
-call2 = "R -e rmarkdown::render(input = '/flywheel/v0/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = {}, attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv'))"
+call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv'))\"".format(project_label)
 print(call2)
