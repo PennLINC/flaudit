@@ -182,12 +182,20 @@ def gather_bids_for_seqs(client, df):
             
             bids_df = pd.concat([bids_df, bids_df_temp], sort=False)
     
-    return pd.merge(bids_df, df2, on='series_id')
+    return bids_df
         
-            
-    
 
-def gather_seqInfo(client, project_label, subject_labels=None, session_labels=None, dry_run=False, unique=True):
+def get_session_label(client, col):
+
+    result = []
+    for i in col:
+        obj = client.get(i).parents.session
+        result.append(client.get(obj).label)
+    return result
+
+
+
+def gather_seqInfo(client, project_label, subject_labels=None, session_labels=None, dry_run=False, unique=False):
     '''
     Runs fw-heudiconv-tabulate to attach sequence information to the gear jobs query
     Inputs:
@@ -195,11 +203,12 @@ def gather_seqInfo(client, project_label, subject_labels=None, session_labels=No
     '''
 
     df = tabulate.tabulate_bids(client, project_label, subject_labels=subject_labels,
-                  session_labels=session_labels, dry_run=False, unique=True)
+                  session_labels=session_labels, dry_run=False, unique=False)
     
-    df_out = gather_bids_for_seqs(client, df)
+    #df_out = gather_bids_for_seqs(client, df)
+    df['session_id'] = get_session_label(client, df.series_id)
     
-    return df_out
+    return df
 
 
 def pull_attachments_from_object(obj):
@@ -391,6 +400,9 @@ def main():
                             subject_labels=args.subject
                             )
                             
+    logger.info("Gathering BIDS data...")
+    bids = gather_bids_for_seqs(client=fw, df=seqinfo)
+                            
     logger.info("Gathering jobs...")
     jobs = gather_jobs(sessions_list=sessions, verbose=True)
 
@@ -398,9 +410,10 @@ def main():
     attachments = gather_attachments(client=fw, project_label=args.project)
     
     logger.info("Writing output data...")
-    seqinfo.to_csv("{}/seqinfo.csv".format(args.destination))
-    jobs.to_csv("{}/jobs.csv".format(args.destination))
-    attachments.to_csv("{}/attachments.csv".format(args.destination))
+    seqinfo.to_csv("{}/seqinfo.csv".format(args.destination), index=False)
+    bids.to_csv("{}/bids.csv".format(args.destination), index=False)
+    jobs.to_csv("{}/jobs.csv".format(args.destination), index=False)
+    attachments.to_csv("{}/attachments.csv".format(args.destination), index=False)
     
     logger.info("Done!")
     #logger.info("{:=^70}".format(": Exiting fw-heudiconv exporter :"))

@@ -8,6 +8,8 @@ params:
   project_name: "gear_testing"
   attachments_csv: "data/attachments.csv"
   seqinfo_csv: "data/seqinfo.csv"
+  bids_csv: "data/bids.csv"
+  workflow_json: "data/workflow.json"
   jobs_csv: "data/jobs.csv"
 ---
 
@@ -29,6 +31,7 @@ library(lubridate)
 library(collapsibleTree)
 library(ggalluvial)
 library(networkD3)
+library(jsonlite)
 
 ggplot_base <- 18
 ```
@@ -43,11 +46,20 @@ attachments <- paste0(current_dir, "/", params$attachments_csv) %>%
   filter(!(str_detect(Name, "json") & str_detect(Origin_Level, "Acquisition")))
 
 seqinfo <- paste0(current_dir, "/", params$seqinfo_csv) %>%
-  read_csv() %>%
-  filter(!is.na(series_description))
+  read_csv()# %>%
+  #filter(!is.na(series_description))
 
 jobs <- paste0(current_dir, "/", params$jobs_csv) %>%
   read_csv()
+
+bids <- paste0(current_dir, "/", params$bids_csv) %>%
+  read_csv()
+
+if(file.exists(params$workflow_json)){
+  workflow <- fromJSON(params$workflow_json)
+} else {
+  workflow <- NA
+}
 ```
 
 ## Project: `r params$project_name`
@@ -64,6 +76,9 @@ Here's a list of all the sequences in `r params$project_name`:
 
 ```{r, warning=FALSE, echo=FALSE}
 sequences <- seqinfo %>%
+  group_by(patient_id, session_id, series_description) %>%
+  slice(1) %>%
+  ungroup() %>%
   pull(series_description) %>% 
   table()  %>%
   as.data.frame() %>%
@@ -86,10 +101,11 @@ ggplot(sequences, aes(x = ., y = Freq))+
   labs(title = "Raw Frequencies of Sequences in the Project", x = "Sequence Name")
 ```
 
-And hence, the missingness of sequences across all the subjects in `r params$project_name`:
+```{r, include = FALSE, echo=FALSE}
+#And hence, the missingness of sequences across all the subjects in `r params$project_name`:
 
-```{r, echo=FALSE}
-seq_ns <- unique(seqinfo$series_description)
+seq_ns <- unique(seqinfo$series_description) %>%
+  na.omit() %>% as.vector()
 ids <- unique(seqinfo$patient_id)
 output_df <- data.frame(matrix(data = 0, ncol = length(seq_ns), nrow = length(ids)))
 
@@ -100,12 +116,16 @@ for(i in 1:length(ids)){
   df <- seqinfo %>%
     filter(patient_id == ids[i])
   
+  
   for(row in 1:nrow(df)){
     
     
     target <- df$series_description[row]
     
-    output_df[i, target] <- output_df[i, target] + 1
+    if(!is.na(target)){
+      output_df[i, target] <- output_df[i, target] + 1
+    }
+    
   }
   
 }
@@ -120,43 +140,35 @@ output_df %>%
 # BIDS Curation
 The tree diagram below shows how each sequence has been curated into BIDS format. The leaf at the end of each branch counts how many subjects have files that fall under each BIDS template.
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, message=FALSE}
 seqinfo %>%
+  # group_by(patient_id, session_id, series_description) %>%
+  # slice(1) %>%
+  # ungroup() %>%
+  select(patient_id, session_id, series_id, series_description) %>%
+  distinct() %>%
+  filter(complete.cases(.)) %>%
+  left_join(distinct(bids)) %>%
   mutate(
     bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
     bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
   ) %>%
-  group_by(series_description, Folder, Modality, bids_name, patient_id) %>%
-  summarise(`Number of Subjects` = n()) %>%
-  mutate(
-    `Number of Subjects` = ifelse(is.na(Folder), 0, `Number of Subjects`),
-    
-  ) %>%
-  collapsibleTreeSummary(., 
-    c("series_description", "Folder", "Modality", "bids_name"),
-    attribute = "Number of Subjects", root = 'project_label', width = 1000, height = 800, zoomable = TRUE
-  )
-```
-
-```{r, echo = FALSE}
-seqinfo %>%
-  mutate(
-    bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
-    bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
-  ) %>%
+  select(series_description, Modality, bids_name, patient_id) %>%
   group_by(series_description, bids_name) %>%
-  summarise(Freq = n()) %>%
+  summarise(`Count` = n()) %>%
   # mutate(
-  #   `Number of Subjects` = ifelse(is.na(Folder), 0, `Number of Subjects`),
+  #   `Number of Subjects` = ifelse(is.na(Folder), 0, `Number of Subjects`)
   #   
   # ) %>%
-  arrange(-Freq) %>%
-  datatable()
+  collapsibleTreeSummary(., 
+    c("series_description", "bids_name"),
+    attribute = "Count", root = params$project_name, width = 1000, height = 800, zoomable = TRUE
+  )
 ```
 
 # Gears and Jobs
 
-There have been `r length(unique(jobs$job_id))` gears run in total, for a total of `r as.character(lubridate::as.duration(sum(jobs$run_runtime_ms)/1000))`. The most commonly run gear is ``r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(gear_name) %>% .[1]`` with a total of `r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(n) %>% .[1]` runs. The gear with the most version increments is ``r jobs %>% group_by(gear_name) %>% summarise(n = n_distinct(gear_version)) %>% arrange(-n) %>% pull(gear_name) %>% .[1]``.
+There have been `r length(unique(jobs$job_id))` gears run in total, for a total runtime of `r as.character(lubridate::as.duration(sum(jobs$run_runtime_ms)/1000))`. The most commonly run gear is ``r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(gear_name) %>% .[1]`` with a total of `r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(n) %>% .[1]` runs. The gear with the most version increments is ``r jobs %>% group_by(gear_name) %>% summarise(n = n_distinct(gear_version)) %>% arrange(-n) %>% pull(gear_name) %>% .[1]``.
 
 Here are the raw counts of complete gear runs, using only the most recent version and run of each gear:
 
@@ -186,6 +198,7 @@ jobs_plot <- jobs %>%
   group_by(job_id) %>%
   arrange(run_status) %>%
   filter(row_number() == 1) %>%
+  ungroup() %>%
   group_by(gear_name, run_status) %>%
   summarise(n = n()) %>%
   mutate(freq = n / sum(n),
@@ -223,7 +236,7 @@ jobs %>%
 
 # Workflow of Curation & Analysis Gears
 
-Below, the Sankey Diagram illustrates the workflow of gear runs in your project `r params$project_name`.
+Below, the Sankey Diagram illustrates the workflow of gear runs in your project `r params$project_name`. Hover over the diagram for enumerations of sessions at each node/transition.
 
 ```{r, echo = FALSE, fig.width=10, fig.height=7}
 # create nodes for each gear
@@ -276,13 +289,13 @@ create_to_and_from <- function(df){
 
 gear_edges <- jobs %>%
   filter(run_status == "complete") %>%
-  arrange(subject, session) %>%
-  group_by(subject, session, gear_name, run_status) %>%
-  arrange(run_datetime) %>%
+  select(subject, session, gear_name, run_datetime) %>%
+  group_by(subject, session, gear_name) %>%
   slice(1) %>%
-  select(subject, session, gear_name, run_datetime, run_status) %>%
+  ungroup() %>%
   group_by(subject, session) %>%
-  mutate(index = row_number()) %>%
+  arrange(subject, session, run_datetime) %>%
+  mutate(index = 1:n()) %>%
   nest() %>%
   mutate(from_to = map(data, create_to_and_from)) %>%
   unnest(from_to) %>%
@@ -298,12 +311,74 @@ gear_edges <- gear_edges %>%
          toID = match(gear_edges$to, gear_nodes$name) - 1) %>%
   as.data.frame()
 
-sankeyNetwork(Links = gear_edges, Nodes = gear_nodes, Source = "fromID", Target = "toID", Value = "n")
+sankeyNetwork(Links = gear_edges, Nodes = gear_nodes, Source = "fromID", Target = "toID", Value = "n", fontSize = 18)
 ```
 
+The Sankey Diagram Below illustrates your ideal workflow for the project, and enumerates how many sessions have been through the workflow specified in your workflow spec:
 
-```{r}
+```{r, echo = FALSE, message=FALSE, fig.width=10, fig.height=7}
+# get the workflow into a dataframe
 
+stages <- names(workflow)
+
+workflow_df <- data.frame()
+
+for(s in stages){
+  
+  tempdf <- workflow[[s]] %>%
+    as.data.frame(stringsAsFactors = FALSE) %>%
+    mutate(stage = s, requires = ifelse(requires == "", NA, requires))
+  
+  workflow_df <- rbind(workflow_df, tempdf)
+  
+}
+
+# > workflow_df
+#             gear_name position          type          requires         stage
+# 1        fw-heudiconv        1      curation                    fw-heudiconv
+# 2         fmriprep-fw        3 preprocessing                        fmriprep
+# 3          qsiprep-fw        4 preprocessing         ABCD_dMRI       qsiprep
+# 4          qsiprep-fw        4 preprocessing ABCD_T1w_MPR_vNav       qsiprep
+# 5 scale-info-uploader        2      curation                   clinical_data
+# 6         qsirecon-fw        5 preprocessing                        qsirecon
+
+# gear nodes
+gear_nodes2 <- workflow_df %>%
+  select(name = gear_name, node = position, group = type) %>%
+  mutate(node = node-1)
+
+# gear edges
+ordered_jobs <- jobs %>%
+  filter(run_status == "complete") %>%
+  select(subject, session, gear_name, run_datetime) %>%
+  group_by(subject, session, gear_name) %>%
+  slice(1) %>%
+  ungroup() %>%
+  group_by(subject, session) %>%
+  arrange(subject, session, run_datetime) %>%
+  mutate(index = 1:n()) %>%
+  ungroup()
+
+gear_edges2 <- ordered_jobs %>%
+  group_by(subject, session) %>%
+  nest() %>%
+  mutate(data = map(data, .f = function(x) left_join(workflow_df, x))) %>%
+  mutate(data = map(data, .f = function(x) filter(x, index != 0))) %>%
+  mutate(from_to = map(data, create_to_and_from)) %>%
+  unnest(from_to) %>%
+  #filter(!is.na(rel)) %>%
+  ungroup() %>%
+  group_by(from, to) %>%
+  summarise(n = n()) %>%
+  ungroup() %>%
+  drop_na()
+
+gear_edges2 <- gear_edges2 %>%
+  mutate(fromID = match(gear_edges2$from, gear_nodes2$name) - 1,
+         toID = match(gear_edges2$to, gear_nodes2$name) - 1) %>%
+  as.data.frame()
+
+sankeyNetwork(Links = gear_edges2, Nodes = gear_nodes2, Source = "fromID", Target = "toID", Value = "n", NodeGroup = "group", fontSize = 18)
 ```
 
 # Attachments
