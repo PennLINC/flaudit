@@ -19,7 +19,11 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 ```
 
 ```{r, include = FALSE, echo = FALSE}
-library(tidyverse)
+library(dplyr)
+library(stringr)
+library(ggplot2)
+library(tidyr)
+library(purrr)
 library(knitr)
 library(scales)
 library(ggrepel)
