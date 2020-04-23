@@ -3,7 +3,7 @@ title: 'FLAUDIT: Flywheel Project Audit'
 output:
   html_document:
     df_print: paged
-    
+
 params:
   project_name: "gear_testing"
   attachments_csv: "data/attachments.csv"
@@ -28,7 +28,6 @@ library(knitr)
 library(scales)
 library(ggrepel)
 library(wordcloud)
-library(DT)
 library(naniar)
 library(gdata)
 library(lubridate)
@@ -36,7 +35,6 @@ library(collapsibleTree)
 library(ggalluvial)
 library(networkD3)
 library(jsonlite)
-library(DT)
 library(data.table)
 
 ggplot_base <- 18
@@ -115,22 +113,22 @@ output_df <- data.frame(matrix(data = 0, ncol = length(seq_ns), nrow = length(id
 names(output_df) <- seq_ns
 
 for(i in 1:length(ids)){
-  
+
   df <- seqinfo %>%
     filter(patient_id == ids[i])
-  
-  
+
+
   for(row in 1:nrow(df)){
-    
-    
+
+
     target <- df$series_description[row]
-    
+
     if(!is.na(target)){
       output_df[i, target] <- output_df[i, target] + 1
     }
-    
+
   }
-  
+
 }
 
 output_df %>%
@@ -161,9 +159,9 @@ seqinfo %>%
   summarise(`Count` = n()) %>%
   # mutate(
   #   `Number of Subjects` = ifelse(is.na(Folder), 0, `Number of Subjects`)
-  #   
+  #
   # ) %>%
-  collapsibleTreeSummary(., 
+  collapsibleTreeSummary(.,
     c("series_description", "bids_name"),
     attribute = "Count", root = params$project_name, width = 1000, height = 800, zoomable = TRUE
   )
@@ -217,7 +215,7 @@ jobs_plot <- jobs %>%
     coord_flip() +
     labs(title = "Gear Runs & Completion Rate", x = "Gear Name") +
     NULL
-    
+
 jobs_plot
 ```
 
@@ -254,38 +252,38 @@ gear_nodes <- jobs %>%
 # create edges
 
 create_to_and_from <- function(df){
-  
+
   if(nrow(df) <= 1){
-    
+
     return(NA)
   }
-  
+
   else{
-    
+
     top <- 1
     bottom <- top + 1
     end <- nrow(df)
-    
+
     from_to <- list()
-    
+
     while(bottom <= end){
-      
+
       #print(slice(df, top:bottom))
       row <- c(
-        as.character(df[top, 'gear_name']), 
+        as.character(df[top, 'gear_name']),
         as.character(df[bottom, 'gear_name'])
         )
       from_to[[top]] <- row
-      
+
       top <- top + 1
       bottom <- bottom + 1
     }
-    
+
     out_df <- do.call('rbind', from_to) %>%
       as.data.frame(stringsAsFactors = FALSE)
-    
+
     names(out_df) <- c("from", "to")
-    
+
     return(out_df)
   }
 }
@@ -327,13 +325,13 @@ stages <- names(workflow)
 workflow_df <- data.frame()
 
 for(s in stages){
-  
+
   tempdf <- workflow[[s]] %>%
     as.data.frame(stringsAsFactors = FALSE) %>%
     mutate(stage = s, requires = ifelse(requires == "", NA, requires))
-  
+
   workflow_df <- rbind(workflow_df, tempdf)
-  
+
 }
 
 # > workflow_df
@@ -386,7 +384,7 @@ sankeyNetwork(Links = gear_edges2, Nodes = gear_nodes2, Source = "fromID", Targe
 
 # Attachments
 
-There are `r nrow(attachments)` attachments for a total of `r humanReadable(sum(attachments$Size_kb), width=4, standard = "SI")` of data. 
+There are `r nrow(attachments)` attachments for a total of `r humanReadable(sum(attachments$Size_kb), width=4, standard = "SI")` of data.
 ```{r, echo=FALSE}
 attachments %>%
   ggplot(aes(x=Type)) +
@@ -398,4 +396,3 @@ attachments %>%
 ```
 
 ---
-

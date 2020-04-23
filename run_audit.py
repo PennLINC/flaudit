@@ -3,6 +3,10 @@ import flywheel
 import os
 import sys
 
+print("here")
+print(flywheel)
+print(sys.version)
+print(dir(os))
 with flywheel.GearContext() as context:
 
     # from the gear context, get the config settings
