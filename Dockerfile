@@ -1,35 +1,29 @@
-From rocker/verse:3.3.1
-
-# GET PYTHON >= 3.7
-# https://forums.docker.com/t/how-can-i-install-python-3-6-version-on-top-of-r/68867/3
-ARG BUILDDIR="/tmp/build"
-ARG PYTHON_VER="3.7"
-WORKDIR ${BUILDDIR}
-
-RUN apt-get update -qq && \
-apt-get upgrade -y  > /dev/null 2>&1 && \
-apt-get install wget gcc make zlib1g-dev -y -qq > /dev/null 2>&1 && \
-wget --quiet https://www.python.org/ftp/python/${PYTHON_VER}/Python-${PYTHON_VER}.tgz > /dev/null 2>&1 && \
-tar zxf Python-${PYTHON_VER}.tgz && \
-cd Python-${PYTHON_VER} && \
-./configure  > /dev/null 2>&1 && \
-make > /dev/null 2>&1 && \
-make install > /dev/null 2>&1 && \
-rm -rf ${BUILDDIR} 
-
-# GET PIP
-RUN apt-get install -y python3-pip
-#RUN cp /usr/bin/python3 /usr/bin/python
-
-MAINTAINER Tinashe Tapera <taperat@pennmedicine.upenn.edu>
+FROM rocker/verse:3.3.1
 
 # Make directory for flywheel spec (v0)
 ENV FLYWHEEL /flywheel/v0
 RUN mkdir -p ${FLYWHEEL}
 COPY manifest.json ${FLYWHEEL}/manifest.json
+MAINTAINER Tinashe Tapera <taperat@pennmedicine.upenn.edu>
+
+# WE EXPORT PATH FOR CONDA
+ENV PATH="/opt/conda/bin:${PATH}"
+
+# UPDATE A SERIES OF PACKAGES
+RUN apt-get update --fix-missing && apt-get install -y ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 libxml2-dev
+
+
+# INSTALL PYTHON 3 AND ANACONDA
+RUN apt-get install -y python3-pip python3-dev && pip3 install virtualenv \
+&& wget --quiet https://repo.anaconda.com/archive/Anaconda3-5.3.0-Linux-x86_64.sh -O ~/anaconda.sh \
+&& /bin/bash ~/anaconda.sh -b -p /opt/conda && rm ~/anaconda.sh \
+&& ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh \
+&& echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
+
+# ACTIVATE CONDA ENVIRONMENT
+RUN echo "source activate base" > ~/.bashrc
 
 # install necessary packages for python
-RUN python3 -m pip install --upgrade pip
 RUN pip install --no-cache nipype
 RUN pip install --no-cache pandas
 RUN pip install --no-cache tqdm

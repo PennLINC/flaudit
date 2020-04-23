@@ -25,7 +25,7 @@ project_label = project_container.label
 
 workflow = context.get_input_path('workflow')
 
-call1 = "python3 /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/ --api-key {}".format(project_label.replace(" ", "\ "), api_key)
+call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/ --api-key {}".format(project_label.replace(" ", "\ "), api_key)
 print("Attempting to gather data with call:")
 print(call1)
 os.system(call1)

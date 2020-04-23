@@ -6,7 +6,7 @@
   "author": "Tinashe Michael Tapera",
 	"maintainer": "Tinashe Michael Tapera",
 	"cite": "",
-	"license": "BSD",
+	"license": "BSD-3-Clause",
 	"source": "",
 	"url": "https://github.com/PennBBL/flaudit/wiki",
   "command": "./run_audit.py",
@@ -29,7 +29,13 @@
 			"optional": true
 		}
 	},
-	"config": {
-		  "foo": "foo"
-	}
+
+        "config": {
+                "Label": {
+                        "description": "Add custom to gear report.",
+                        "type": "string",
+                        "default": ""
+                }
+        }
+
 }
