@@ -32,6 +32,8 @@ library(collapsibleTree)
 library(ggalluvial)
 library(networkD3)
 library(jsonlite)
+library(DT)
+library(data.table)
 
 ggplot_base <- 18
 ```
@@ -40,19 +42,19 @@ ggplot_base <- 18
 
 current_dir <- getwd()
 
-attachments <- paste0(current_dir, "/", params$attachments_csv) %>%
+attachments <- params$attachments_csv %>%
   read_csv() %>%
   filter(!str_detect(Type, "bvec|bval")) %>%
   filter(!(str_detect(Name, "json") & str_detect(Origin_Level, "Acquisition")))
 
-seqinfo <- paste0(current_dir, "/", params$seqinfo_csv) %>%
+seqinfo <- params$seqinfo_csv %>%
   read_csv()# %>%
   #filter(!is.na(series_description))
 
-jobs <- paste0(current_dir, "/", params$jobs_csv) %>%
+jobs <- params$jobs_csv %>%
   read_csv()
 
-bids <- paste0(current_dir, "/", params$bids_csv) %>%
+bids <- params$bids_csv %>%
   read_csv()
 
 if(file.exists(params$workflow_json)){

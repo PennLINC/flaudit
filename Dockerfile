@@ -38,7 +38,7 @@ RUN pip install --no-cache fw-heudiconv
 
 # install necessary packages for R
 
-RUN Rscript -e "install.packages(c('rmarkdown', 'tidyverse', 'knitr', 'scales', 'ggrepel', 'wordcloud', 'DT', 'naniar', 'gdata', 'lubridate', 'collapsibleTree', 'ggalluvial', 'networkD3'), repos = 'http://cran.us.r-project.org')"
+RUN Rscript -e "install.packages(c('rmarkdown', 'tidyverse', 'knitr', 'scales', 'ggrepel', 'wordcloud', 'DT', 'naniar', 'gdata', 'lubridate', 'collapsibleTree', 'ggalluvial', 'networkD3', 'data.table'), repos = 'http://cran.us.r-project.org')"
 
 # Copy necessary files
 
