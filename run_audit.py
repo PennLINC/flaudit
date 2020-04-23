@@ -4,27 +4,30 @@ import os
 import sys
 
 with flywheel.GearContext() as context:
-    
-    config = context.config                                   # from the gear context, get the config settings
+
+    # from the gear context, get the config settings
+    config = context.config
 
     api_key = context.get_input('api_key')['key']
-    fw = flywheel.Client(api_key) # log in to flywheel
-    
-    analysis_id = context.destination['id']                   # get the analysis object this gear run will be in
+    fw = flywheel.Client(api_key)  # log in to flywheel
+
+    # get the analysis object this gear run will be in
+    analysis_id = context.destination['id']
     analysis_container = fw.get(analysis_id)
 
     parent_container = analysis_container.parent
 
     if parent_container.type != "project":
-      print("Gear can only be run from the project level!")
-      sys.exit(0)
+        print("Gear can only be run from the project level!")
+        sys.exit(0)
 
     project_container = fw.get(parent_container.id)
     project_label = project_container.label
 
     workflow = context.get_input_path('workflow')
 
-    call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/ --api-key {}".format(project_label.replace(" ", "\ "), api_key)
+    call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/ --api-key {}".format(
+        project_label.replace(" ", "\ "), api_key)
     print("Attempting to gather data with call:")
     print(call1)
     os.system(call1)

@@ -38,14 +38,17 @@ def get_sessions(client, project_label, subject_labels=None, session_labels=None
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        project_obj = client.projects.find_first('label="{}"'.format(project_label))
+        project_obj = client.projects.find_first(
+            'label="{}"'.format(project_label))
         assert project_obj, "Project not found! Maybe check spelling...?"
-        logger.debug('Found project: %s (%s)', project_obj['label'], project_obj.id)
+        logger.debug('Found project: %s (%s)',
+                     project_obj['label'], project_obj.id)
 
     sessions = client.get_project_sessions(project_obj.id)
     # filters
     if subject_labels:
-        sessions = [s for s in sessions if s.subject['label'] in subject_labels]
+        sessions = [s for s in sessions if s.subject['label']
+                    in subject_labels]
     if session_labels:
         sessions = [s for s in sessions if s.label in session_labels]
 
@@ -122,68 +125,71 @@ def gather_jobs(sessions_list, verbose):
                             'id': np.nan,
                             'name': np.nan,
                             'Inputs_Option': np.nan
-                            }
+                        }
 
-                    config_cols = pd.DataFrame(list(config.items()), columns=['Config_Option', 'Config_Value'])
+                    config_cols = pd.DataFrame(list(config.items()), columns=[
+                                               'Config_Option', 'Config_Value'])
                     inputs_cols = pd.DataFrame(inputs,  index=[0])
-                    inputs_cols.rename(columns={'type': 'Inputs_Attached_To', 'id': 'Inputs_ID', 'name': 'Inputs_Name'}, inplace=True)
+                    inputs_cols.rename(columns={
+                                       'type': 'Inputs_Attached_To', 'id': 'Inputs_ID', 'name': 'Inputs_Name'}, inplace=True)
 
-                    final = pd.concat([final, inputs_cols, config_cols], axis=1)
-
+                    final = pd.concat(
+                        [final, inputs_cols, config_cols], axis=1)
 
                 df = pd.concat([df, final])
-                df.loc[:, ~df.columns.str.contains("Config")] = df.loc[:, ~df.columns.str.contains("Config")].ffill()
+                df.loc[:, ~df.columns.str.contains(
+                    "Config")] = df.loc[:, ~df.columns.str.contains("Config")].ffill()
 
     return(df)
 
 
 def get_bids_from_acq(client, id):
-    
+
     acq = client.get(id)
     sess_lab = client.get(acq['parents']['session']).label
-    
+
     niftis = [x for x in acq.files if x.type in ['nifti', 'bval', 'bvec']]
-    
+
     if not niftis:
         return None
     else:
-        
+
         rows = []
-        
+
         for nii in niftis:
-            
+
             rows.append(get_nested(nii, 'info', 'BIDS'))
-            
+
         return sess_lab, rows
-     
+
 
 def gather_bids_for_seqs(client, df):
-    
+
     bids_df = pd.DataFrame(
-        #columns = [
-        #'series_id', 'Task', 'Run', 'error_message', 'Ce', 'Filename', 
+        # columns = [
+        #'series_id', 'Task', 'Run', 'error_message', 'Ce', 'Filename',
         #'Filename', 'ignore', 'Acq', 'valid', 'template',
         #'Rec', 'Path', 'Folder', 'Echo', 'Modality', 'Dir', 'Mod'
-        #]
+        # ]
     )
-    
+
     df2 = df.copy()
-    
+
     for index, row in tqdm(df.iterrows()):
-        #print(row['series_id'])
+        # print(row['series_id'])
         sess_lab, bids = get_bids_from_acq(client, row['series_id'])
         bids = [x for x in bids if x is not None and x != 'NA']
-        
+
         if bids:
-            
+
             bids_df_temp = pd.DataFrame(bids)
             bids_df_temp['series_id'] = row['series_id']
             bids_df_temp['session_id'] = sess_lab
-            
+
             bids_df = pd.concat([bids_df, bids_df_temp], sort=False)
-    
+
     return bids_df
-        
+
 
 def get_session_label(client, col):
 
@@ -194,7 +200,6 @@ def get_session_label(client, col):
     return result
 
 
-
 def gather_seqInfo(client, project_label, subject_labels=None, session_labels=None, dry_run=False, unique=False):
     '''
     Runs fw-heudiconv-tabulate to attach sequence information to the gear jobs query
@@ -203,11 +208,11 @@ def gather_seqInfo(client, project_label, subject_labels=None, session_labels=No
     '''
 
     df = tabulate.tabulate_bids(client, project_label, subject_labels=subject_labels,
-                  session_labels=session_labels, dry_run=False, unique=False)
-    
+                                session_labels=session_labels, dry_run=False, unique=False)
+
     #df_out = gather_bids_for_seqs(client, df)
     df['session_id'] = get_session_label(client, df.series_id)
-    
+
     return df
 
 
@@ -219,7 +224,7 @@ def pull_attachments_from_object(obj):
         'Type': [],
         'MIMEType': [],
         'Size_kb': []
-        }
+    }
 
     for f in attachments:
 
@@ -248,13 +253,16 @@ def gather_attachments(client, project_label, project_level=True, subject_level=
         A list of session objects
     '''
 
-    assert any([project_level, subject_level, session_level, acquisition_level]), "No attachment levels requested."
+    assert any([project_level, subject_level, session_level,
+                acquisition_level]), "No attachment levels requested."
 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        project_obj = client.projects.find_first('label="{}"'.format(project_label))
+        project_obj = client.projects.find_first(
+            'label="{}"'.format(project_label))
         assert project_obj, "Project not found! Maybe check spelling...?"
-        logger.debug('Found project: %s (%s)', project_obj['label'], project_obj.id)
+        logger.debug('Found project: %s (%s)',
+                     project_obj['label'], project_obj.id)
 
     attachments = pd.DataFrame()
 
@@ -284,7 +292,8 @@ def gather_attachments(client, project_label, project_level=True, subject_level=
 
     if session_level:
 
-        sessions = [client.get(x.id) for x in client.get_project_sessions(project_obj.id)]
+        sessions = [client.get(x.id)
+                    for x in client.get_project_sessions(project_obj.id)]
 
         assert sessions, "No sessions found!"
 
@@ -386,37 +395,39 @@ def main():
     if not os.path.exists(destination):
         logger.info("Creating destination directory...")
         os.makedirs(args.destination)
-    
+
     logger.info("Gathering sessions...")
     sessions = get_sessions(client=fw,
                             project_label=args.project,
                             session_labels=args.session,
                             subject_labels=args.subject)
-                            
+
     logger.info("Gathering sequences...")
     seqinfo = gather_seqInfo(client=fw,
-                            project_label=args.project,
-                            session_labels=args.session,
-                            subject_labels=args.subject
-                            )
-                            
+                             project_label=args.project,
+                             session_labels=args.session,
+                             subject_labels=args.subject
+                             )
+
     logger.info("Gathering BIDS data...")
     bids = gather_bids_for_seqs(client=fw, df=seqinfo)
-                            
+
     logger.info("Gathering jobs...")
     jobs = gather_jobs(sessions_list=sessions, verbose=True)
 
     logger.info("Gathering attachments...")
     attachments = gather_attachments(client=fw, project_label=args.project)
-    
+
     logger.info("Writing output data...")
     seqinfo.to_csv("{}/seqinfo.csv".format(args.destination), index=False)
     bids.to_csv("{}/bids.csv".format(args.destination), index=False)
     jobs.to_csv("{}/jobs.csv".format(args.destination), index=False)
-    attachments.to_csv("{}/attachments.csv".format(args.destination), index=False)
-    
+    attachments.to_csv(
+        "{}/attachments.csv".format(args.destination), index=False)
+
     logger.info("Done!")
     #logger.info("{:=^70}".format(": Exiting fw-heudiconv exporter :"))
+
 
 if __name__ == '__main__':
     main()
