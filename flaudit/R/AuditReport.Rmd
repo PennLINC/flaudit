@@ -76,15 +76,12 @@ Here's a list of all the sequences in `r params$project_name`:
 
 ```{r, warning=FALSE, echo=FALSE}
 sequences <- seqinfo %>%
-  group_by(patient_id, session_id, series_description) %>%
-  slice(1) %>%
-  ungroup() %>%
-  pull(series_description) %>% 
-  table()  %>%
-  as.data.frame() %>%
-  arrange(-Freq)
+  group_by(series_description) %>%
+  summarise(Freq = n()) %>%
+  arrange(-Freq) %>%
+  drop_na()
 
-wordcloud(sequences$., sequences$Freq, min.freq = 0, scale = c(1, 2), random.order = TRUE)
+wordcloud(words = sequences$series_description, freq = sequences$Freq)
 ```
 
 ```{r, echo=FALSE}
@@ -94,7 +91,7 @@ datatable(sequences)
 We visualise the above frequencies below:
 
 ```{r, echo = FALSE}
-ggplot(sequences, aes(x = ., y = Freq))+
+ggplot(sequences, aes(x = series_description, y = Freq))+
   geom_col() +
   coord_flip() +
   theme_minimal(base_size = ggplot_base) +
@@ -393,4 +390,6 @@ attachments %>%
   labs(title = "Attachments Count")# +
   #facet_wrap(~gear_name, scales = "free")
 ```
+
+---
 

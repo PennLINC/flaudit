@@ -3,22 +3,35 @@
 import json
 import flywheel
 import os
+import sys
 
-# context = flywheel.GearContext()
-# config = context.config                                   # from the gear context, get the config settings
-# 
-# fw = context.client # log in to flywheel
-# 
-# analysis_id = context.destination['id']                   # get the analysis object this gear run will be in
-# analysis_container = fw.get(analysis_id)
-# project_container = fw.get(analysis_container.parents['project'])
-# session_container = fw.get(analysis_container.parent['id'])
-# subject_container = fw.get(session_container.parents['subject'])
+context = flywheel.GearContext()
+config = context.config                                   # from the gear context, get the config settings
 
-project_label = "gear_testing" # project_label = project_container.label
+fw = context.client # log in to flywheel
+
+analysis_id = context.destination['id']                   # get the analysis object this gear run will be in
+analysis_container = fw.get(analysis_id)
+
+parent_container = analysis_container.parent
+
+if parent_container.type != "project":
+  print("Gear can only be run from the project level!")
+  sys.exit(0)
+
+project_container = fw.get(parent_container.id)
+project_label = project_container.label
+
+workflow = context.get_input_path('workflow')
 
 call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/".format(project_label.replace(" ", "\ "))
+print("Attempting to gather data with call:")
 print(call1)
+os.system(call1)
 
-call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv', bids_csv = '/flywheel/v0/output/bids.csv', workflow_json = '/flywheel/v0/output/workflow.json'))\"".format(project_label)
+call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv', bids_csv = '/flywheel/v0/output/bids.csv', workflow_json = '{}'))\"".format(project_label, workflow)
+print("Building audit report with call:")
 print(call2)
+os.system(call2)
+
+print("Done!")

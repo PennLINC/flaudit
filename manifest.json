@@ -1,0 +1,35 @@
+{
+	"name": "flaudit",
+	"label": "Flaudit: Flywheel Audit",
+	"description": "Audit your Flywheel project for sequence completeness, BIDS curation summaries, gear and job runs, workflow completeness, and more.",
+	"version": "0.0.1_0.0.1",
+  "author": "Tinashe Michael Tapera",
+	"maintainer": "Tinashe Michael Tapera",
+	"cite": "",
+	"license": "BSD",
+	"source": "",
+	"url": "https://github.com/PennBBL/flaudit/wiki",
+  "command": "./run_audit.py",
+
+  "custom": {
+    "gear-builder": {
+      "category": "analysis",
+      "image": "pennbbl/flaudit:0.0.1_0.0.1"
+    },
+    "flywheel":{"suite": "PennBBL"}
+  },
+  
+	"inputs": {
+		"api_key": {
+			"base": "api-key"
+		},
+		"workflow": {
+			"base": "file",
+			"description": "JSON file describing the desired gear workflow for the project",
+			"optional": true
+		}
+	},
+	"config": {
+		  "foo": "foo"
+	}
+}
