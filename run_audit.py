@@ -10,6 +10,7 @@ config = context.config                                   # from the gear contex
 
 fw = context.client # log in to flywheel
 
+api_key = context.get_input("api_key")
 analysis_id = context.destination['id']                   # get the analysis object this gear run will be in
 analysis_container = fw.get(analysis_id)
 
@@ -24,7 +25,7 @@ project_label = project_container.label
 
 workflow = context.get_input_path('workflow')
 
-call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/".format(project_label.replace(" ", "\ "))
+call1 = "python3 /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/ --api-key {}".format(project_label.replace(" ", "\ "), api_key)
 print("Attempting to gather data with call:")
 print(call1)
 os.system(call1)
