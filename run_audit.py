@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import json
 import flywheel
 import os
