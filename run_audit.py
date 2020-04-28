@@ -37,7 +37,7 @@ with flywheel.GearContext() as context:
     print(call1)
     os.system(call1)
 
-    call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv', bids_csv = '/flywheel/v0/output/bids.csv', workflow_json = '{}'))\"".format(project_label, workflow)
+    call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/flaudit/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv', bids_csv = '/flywheel/v0/output/bids.csv', workflow_json = '{}'))\"".format(project_label, workflow)
     print("Building audit report with call:")
     print(call2)
     os.system(call2)

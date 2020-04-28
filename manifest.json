@@ -2,19 +2,18 @@
 	"name": "flaudit",
 	"label": "Flaudit: Flywheel Audit",
 	"description": "Audit your Flywheel project for sequence completeness, BIDS curation summaries, gear and job runs, workflow completeness, and more.",
-	"version": "0.0.2-11_0.0.1",
+	"version": "0.0.2-16_0.0.1",
   "author": "Tinashe Michael Tapera",
 	"maintainer": "Tinashe Michael Tapera",
 	"cite": "",
 	"license": "BSD-3-Clause",
 	"source": "",
 	"url": "https://github.com/PennBBL/flaudit/wiki",
-  "command": "./run_audit.py",
 
   "custom": {
     "gear-builder": {
       "category": "analysis",
-      "image": "pennbbl/flaudit:0.0.2-11_0.0.1"
+      "image": "pennbbl/flaudit:0.0.2-16_0.0.1"
     },
     "flywheel":{"suite": "PennBBL"}
   },
