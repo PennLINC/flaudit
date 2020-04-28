@@ -1,0 +1,11 @@
+#! /bin/bash
+
+echo Running...
+
+which python
+
+ls /flywheel/v0
+
+/opt/conda/bin/python /flywheel/v0/run_audit.py
+
+echo Done!

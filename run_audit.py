@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-
+#! /opt/conda/bin/python
 import json
 import flywheel
 import os

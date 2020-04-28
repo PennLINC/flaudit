@@ -39,5 +39,5 @@ RUN Rscript -e "install.packages(c('dplyr', 'stringr', 'tidyr', 'ggplot2', 'purr
 COPY . ${FLYWHEEL}
 
 # Set the entrypoint
-RUN cd /flywheel/v0
 ENTRYPOINT ["/flywheel/v0/run_audit.py"]
+WORKDIR /flywheel/v0
