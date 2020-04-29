@@ -6,19 +6,19 @@ output:
 
 params:
   project_name: "gear_testing"
-  attachments_csv: "data/attachments.csv"
-  seqinfo_csv: "data/seqinfo.csv"
-  bids_csv: "data/bids.csv"
-  workflow_json: "data/workflow.json"
-  jobs_csv: "data/jobs.csv"
+  attachments_csv: "/flywheel/v0/output/attachments.csv"
+  seqinfo_csv: "/flywheel/v0/output/seqinfo.csv"
+  bids_csv: "/flywheel/v0/output/bids.csv"
+  workflow_json: "/flywheel/v0/input/workflow/workflow.json"
+  jobs_csv: "/flywheel/v0/output/jobs.csv"
 ---
 
 ```{r, include = FALSE, echo = FALSE, cache = FALSE}
 knitr::opts_chunk$set(echo = FALSE, fig.width=16, fig.height=12)
-knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 ```
 
 ```{r, include = FALSE, echo = FALSE}
+install.packages('DT')
 library(dplyr)
 library(stringr)
 library(ggplot2)
@@ -36,6 +36,8 @@ library(ggalluvial)
 library(networkD3)
 library(jsonlite)
 library(data.table)
+library(readr)
+library(DT)
 
 ggplot_base <- 18
 ```
