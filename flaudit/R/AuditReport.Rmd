@@ -18,7 +18,7 @@ knitr::opts_chunk$set(echo = FALSE, fig.width=16, fig.height=12)
 ```
 
 ```{r, include = FALSE, echo = FALSE}
-install.packages('DT')
+library(DT)
 library(dplyr)
 library(stringr)
 library(ggplot2)
@@ -37,15 +37,11 @@ library(networkD3)
 library(jsonlite)
 library(data.table)
 library(readr)
-library(DT)
 
 ggplot_base <- 18
 ```
 
 ```{r, include = FALSE, echo = FALSE}
-
-current_dir <- getwd()
-
 attachments <- params$attachments_csv %>%
   read_csv() %>%
   filter(!str_detect(Type, "bvec|bval")) %>%
@@ -65,6 +61,10 @@ if(file.exists(params$workflow_json)){
   workflow <- fromJSON(params$workflow_json)
 } else {
   workflow <- NA
+}
+
+if(nrow(seqinfo) < 1){
+  stop("Seqinfo table is empty!")
 }
 ```
 
@@ -151,7 +151,7 @@ seqinfo %>%
   select(patient_id, session_id, series_id, series_description) %>%
   distinct() %>%
   filter(complete.cases(.)) %>%
-  left_join(distinct(bids)) %>%
+  left_join(distinct(bids), by = c("session_id", "series_id")) %>%
   mutate(
     bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
     bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
@@ -241,7 +241,7 @@ jobs %>%
 
 Below, the Sankey Diagram illustrates the workflow of gear runs in your project `r params$project_name`. Hover over the diagram for enumerations of sessions at each node/transition.
 
-```{r, echo = FALSE, fig.width=10, fig.height=7}
+```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width=10, fig.height=7}
 # create nodes for each gear
 
 gear_nodes <- jobs %>%
@@ -319,69 +319,74 @@ sankeyNetwork(Links = gear_edges, Nodes = gear_nodes, Source = "fromID", Target 
 
 The Sankey Diagram Below illustrates your ideal workflow for the project, and enumerates how many sessions have been through the workflow specified in your workflow spec:
 
-```{r, echo = FALSE, message=FALSE, fig.width=10, fig.height=7}
+```{r, echo = FALSE, message=FALSE, warning = FALSE, fig.width=10, fig.height=7}
 # get the workflow into a dataframe
+if(is.list(workflow)){
+  print("No workflow document supplied!")
+} else {
+  
+  stages <- names(workflow)
 
-stages <- names(workflow)
-
-workflow_df <- data.frame()
-
-for(s in stages){
-
-  tempdf <- workflow[[s]] %>%
-    as.data.frame(stringsAsFactors = FALSE) %>%
-    mutate(stage = s, requires = ifelse(requires == "", NA, requires))
-
-  workflow_df <- rbind(workflow_df, tempdf)
+  workflow_df <- data.frame()
+  
+  for(s in stages){
+  
+    tempdf <- workflow[[s]] %>%
+      as.data.frame(stringsAsFactors = FALSE) %>%
+      mutate(stage = s, requires = ifelse(requires == "", NA, requires))
+  
+    workflow_df <- rbind(workflow_df, tempdf)
+  
+  }
+  
+  # > workflow_df
+  #             gear_name position          type          requires         stage
+  # 1        fw-heudiconv        1      curation                    fw-heudiconv
+  # 2         fmriprep-fw        3 preprocessing                        fmriprep
+  # 3          qsiprep-fw        4 preprocessing         ABCD_dMRI       qsiprep
+  # 4          qsiprep-fw        4 preprocessing ABCD_T1w_MPR_vNav       qsiprep
+  # 5 scale-info-uploader        2      curation                   clinical_data
+  # 6         qsirecon-fw        5 preprocessing                        qsirecon
+  
+  # gear nodes
+  gear_nodes2 <- workflow_df %>%
+    select(name = gear_name, node = position, group = type) %>%
+    mutate(node = node-1)
+  
+  # gear edges
+  ordered_jobs <- jobs %>%
+    filter(run_status == "complete") %>%
+    select(subject, session, gear_name, run_datetime) %>%
+    group_by(subject, session, gear_name) %>%
+    slice(1) %>%
+    ungroup() %>%
+    group_by(subject, session) %>%
+    arrange(subject, session, run_datetime) %>%
+    mutate(index = 1:n()) %>%
+    ungroup()
+  
+  gear_edges2 <- ordered_jobs %>%
+    group_by(subject, session) %>%
+    nest() %>%
+    mutate(data = map(data, .f = function(x) left_join(workflow_df, x, by = 'gear_name'))) %>%
+    mutate(data = map(data, .f = function(x) filter(x, index != 0))) %>%
+    mutate(from_to = map(data, create_to_and_from)) %>%
+    unnest(from_to) %>%
+    #filter(!is.na(rel)) %>%
+    ungroup() %>%
+    group_by(from, to) %>%
+    summarise(n = n()) %>%
+    ungroup() %>%
+    drop_na()
+  
+  gear_edges2 <- gear_edges2 %>%
+    mutate(fromID = match(gear_edges2$from, gear_nodes2$name) - 1,
+           toID = match(gear_edges2$to, gear_nodes2$name) - 1) %>%
+    as.data.frame()
+  
+  sankeyNetwork(Links = gear_edges2, Nodes = gear_nodes2, Source = "fromID", Target = "toID", Value = "n", NodeGroup = "group", fontSize = 18)
 
 }
-
-# > workflow_df
-#             gear_name position          type          requires         stage
-# 1        fw-heudiconv        1      curation                    fw-heudiconv
-# 2         fmriprep-fw        3 preprocessing                        fmriprep
-# 3          qsiprep-fw        4 preprocessing         ABCD_dMRI       qsiprep
-# 4          qsiprep-fw        4 preprocessing ABCD_T1w_MPR_vNav       qsiprep
-# 5 scale-info-uploader        2      curation                   clinical_data
-# 6         qsirecon-fw        5 preprocessing                        qsirecon
-
-# gear nodes
-gear_nodes2 <- workflow_df %>%
-  select(name = gear_name, node = position, group = type) %>%
-  mutate(node = node-1)
-
-# gear edges
-ordered_jobs <- jobs %>%
-  filter(run_status == "complete") %>%
-  select(subject, session, gear_name, run_datetime) %>%
-  group_by(subject, session, gear_name) %>%
-  slice(1) %>%
-  ungroup() %>%
-  group_by(subject, session) %>%
-  arrange(subject, session, run_datetime) %>%
-  mutate(index = 1:n()) %>%
-  ungroup()
-
-gear_edges2 <- ordered_jobs %>%
-  group_by(subject, session) %>%
-  nest() %>%
-  mutate(data = map(data, .f = function(x) left_join(workflow_df, x))) %>%
-  mutate(data = map(data, .f = function(x) filter(x, index != 0))) %>%
-  mutate(from_to = map(data, create_to_and_from)) %>%
-  unnest(from_to) %>%
-  #filter(!is.na(rel)) %>%
-  ungroup() %>%
-  group_by(from, to) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  drop_na()
-
-gear_edges2 <- gear_edges2 %>%
-  mutate(fromID = match(gear_edges2$from, gear_nodes2$name) - 1,
-         toID = match(gear_edges2$to, gear_nodes2$name) - 1) %>%
-  as.data.frame()
-
-sankeyNetwork(Links = gear_edges2, Nodes = gear_nodes2, Source = "fromID", Target = "toID", Value = "n", NodeGroup = "group", fontSize = 18)
 ```
 
 # Attachments

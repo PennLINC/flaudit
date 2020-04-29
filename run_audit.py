@@ -3,11 +3,13 @@ import json
 import flywheel
 import os
 import sys
+import logging
 
-print("here")
-print(flywheel)
-print(sys.version)
-print(dir(os))
+# logging stuff
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger('flaudit')
+logger.info("{:=^70}\n".format(": flaudit gear manager starting up :"))
+
 with flywheel.GearContext() as context:
 
     # from the gear context, get the config settings
@@ -23,7 +25,7 @@ with flywheel.GearContext() as context:
     parent_container = analysis_container.parent
 
     if parent_container.type != "project":
-        print("Gear can only be run from the project level!")
+        logger.error("Gear can only be run from the project level!")
         sys.exit(0)
 
     project_container = fw.get(parent_container.id)
@@ -31,15 +33,13 @@ with flywheel.GearContext() as context:
 
     workflow = context.get_input_path('workflow')
 
-    call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/ --api-key {}".format(
-        project_label.replace(" ", "\ "), api_key)
-    print("Attempting to gather data with call:")
-    print(call1)
+    call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/".format(project_label.replace(" ", "\ "))
+    logger.info("Attempting to gather data with call:\n\t" + call1)
+    call1 = call1 + " --api-key " + api_key
     os.system(call1)
 
     call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/flaudit/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv', bids_csv = '/flywheel/v0/output/bids.csv', workflow_json = '{}'))\"".format(project_label, workflow)
-    print("Building audit report with call:")
-    print(call2)
+    logger.info("Building audit report with call:\n\t" + call2)
     os.system(call2)
 
-    print("Done!")
+    logger.info("{:=^70}\n".format(": Done! :"))
