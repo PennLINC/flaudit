@@ -18,6 +18,7 @@ knitr::opts_chunk$set(echo = FALSE, fig.width=16, fig.height=12)
 ```
 
 ```{r, include = FALSE, echo = FALSE}
+install.packages('DT')
 library(DT)
 library(dplyr)
 library(stringr)
@@ -321,7 +322,7 @@ The Sankey Diagram Below illustrates your ideal workflow for the project, and en
 
 ```{r, echo = FALSE, message=FALSE, warning = FALSE, fig.width=10, fig.height=7}
 # get the workflow into a dataframe
-if(is.list(workflow)){
+if(!is.list(workflow)){
   print("No workflow document supplied!")
 } else {
   
