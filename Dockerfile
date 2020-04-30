@@ -26,7 +26,6 @@ RUN echo "source activate base" > ~/.bashrc
 # install necessary packages for python
 RUN pip install --no-cache nipype
 RUN pip install --no-cache pandas
-RUN pip install --no-cache tqdm
 RUN pip install --no-cache flywheel-sdk==11.*
 RUN pip install --no-cache fw-heudiconv
 

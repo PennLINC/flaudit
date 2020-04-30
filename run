@@ -1,19 +1,10 @@
 #! /bin/bash
 
 echo Running...
-
-which python
-
 echo amending path...
 
 PATH=/opt/conda/bin:/opt/conda/bin:/usr/lib/rstudio-server/bin:$PATH
 
-echo checking path...
-
-echo $PATH
-
-which python
-
-/opt/conda/bin/python /flywheel/v0/run_audit.py
+time /opt/conda/bin/python /flywheel/v0/run_audit.py
 
 echo Done!

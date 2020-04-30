@@ -5,7 +5,6 @@ import argparse
 import os
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
 from fw_heudiconv.cli import tabulate
 from fw_heudiconv.cli.export import get_nested
 
@@ -62,7 +61,7 @@ def gather_jobs(sessions_list, verbose):
     '''
     logger.info("Collecting gear run information...")
     df = pd.DataFrame()
-    for sess in tqdm(sessions_list):
+    for sess in sessions_list:
 
         if len(sess.analyses) < 1:
 
@@ -175,7 +174,7 @@ def gather_bids_for_seqs(client, df):
 
     df2 = df.copy()
 
-    for index, row in tqdm(df.iterrows()):
+    for index, row in df.iterrows():
         # print(row['series_id'])
         sess_lab, bids = get_bids_from_acq(client, row['series_id'])
         bids = [x for x in bids if x is not None and x != 'NA']
