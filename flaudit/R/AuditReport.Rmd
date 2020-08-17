@@ -11,6 +11,7 @@ params:
   bids_csv: "/flywheel/v0/output/bids.csv"
   workflow_json: "/flywheel/v0/input/workflow/workflow.json"
   jobs_csv: "/flywheel/v0/output/jobs.csv"
+  golden: ""
 ---
 
 ```{r, include = FALSE, echo = FALSE, cache = FALSE}
@@ -43,19 +44,24 @@ ggplot_base <- 18
 ```
 
 ```{r, include = FALSE, echo = FALSE}
-attachments <- params$attachments_csv %>%
+library(here)
+attachments <- #here('data', 'grmpy', 'attachments.csv') %>% 
+  params$attachments_csv %>%
   read_csv() %>%
   filter(!str_detect(Type, "bvec|bval")) %>%
   filter(!(str_detect(Name, "json") & str_detect(Origin_Level, "Acquisition")))
 
-seqinfo <- params$seqinfo_csv %>%
+seqinfo <- #here('data', 'grmpy', 'seqinfo.csv') %>% 
+  params$seqinfo_csv %>%
   read_csv()# %>%
   #filter(!is.na(series_description))
 
-jobs <- params$jobs_csv %>%
+jobs <- #here('data', 'grmpy', 'jobs.csv') %>% 
+  params$jobs_csv %>%
   read_csv()
 
-bids <- params$bids_csv %>%
+bids <- #here('data', 'grmpy', 'bids.csv') %>% 
+  params$bids_csv %>%
   read_csv()
 
 if(file.exists(params$workflow_json)){
@@ -67,6 +73,22 @@ if(file.exists(params$workflow_json)){
 if(nrow(seqinfo) < 1){
   stop("Seqinfo table is empty!")
 }
+
+if(params$golden == '') {
+  
+  warning('Template subject not given, using first subject')
+  golden_id <- seqinfo$patient_id[0]
+  
+} else if(!(params$golden %in% seqinfo$patient_id)) {
+  
+  warning('Template subject not found in project, using first subject')
+  golden_id <- seqinfo$patient_id[0]
+  
+} else {
+  
+  golden_id <- params$golden
+  
+}
 ```
 
 ## Project: `r params$project_name`
@@ -75,9 +97,13 @@ if(nrow(seqinfo) < 1){
 
 ## Number of Sessions: `r nrow(distinct(seqinfo, patient_id, session_id))`
 
+## Template Subject: `r golden_id`
+
 ---
 
-# Sequences
+# Overview {.tabset .tabset-pills}
+
+## Sequences
 
 Here's a list of all the sequences in `r params$project_name`:
 
@@ -141,7 +167,7 @@ output_df %>%
   theme_minimal(base_size = ggplot_base)
 ```
 
-# BIDS Curation
+## BIDS Curation
 The tree diagram below shows how each sequence has been curated into BIDS format. The leaf at the end of each branch counts how many subjects have files that fall under each BIDS template.
 
 ```{r, echo = FALSE, message=FALSE}
@@ -170,7 +196,7 @@ seqinfo %>%
   )
 ```
 
-# Gears and Jobs
+## Gears and Jobs
 
 There have been `r length(unique(jobs$job_id))` gears run in total, for a total runtime of `r as.character(lubridate::as.duration(sum(jobs$run_runtime_ms)/1000))`. The most commonly run gear is ``r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(gear_name) %>% .[1]`` with a total of `r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(n) %>% .[1]` runs. The gear with the most version increments is ``r jobs %>% group_by(gear_name) %>% summarise(n = n_distinct(gear_version)) %>% arrange(-n) %>% pull(gear_name) %>% .[1]``.
 
@@ -222,7 +248,7 @@ jobs_plot <- jobs %>%
 jobs_plot
 ```
 
-# Gear Runtime
+## Gear Runtime
 
 Below are the runtimes of gear runs:
 
@@ -237,6 +263,163 @@ jobs %>%
     labs(title = "Gear Runtimes", x = "Runtime in Minutes") +
     facet_wrap(~gear_name, scales = "free")
 ```
+
+## Attachments
+
+There are `r nrow(attachments)` attachments for a total of `r humanReadable(sum(attachments$Size_kb), width=4, standard = "SI")` of data.
+```{r, echo=FALSE}
+attachments %>%
+  ggplot(aes(x=Type)) +
+  geom_bar(aes(fill = Origin_Level), alpha = 0.5) +
+  theme_minimal(base_size = 18) +
+  scale_fill_viridis_d() +
+  labs(title = "Attachments Count")# +
+  #facet_wrap(~gear_name, scales = "free")
+```
+
+# {-}
+
+# Project Completion {.tabset .tabset-pills}
+
+Using subject ``r params$golden`` as the project template, the following sections show project completeness in terms of sequence collection and preprocessing/analysis gear runs.
+
+## Sequences
+
+The following table displays all the available sequences collected from subject ``r params$golden`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of sequences as the template subject. Filters in the column header can be used for quick inspection.
+
+```{r}
+wide_seqinfos <- seqinfo %>%
+  select(series_description, patient_id) %>%
+  group_by(patient_id, series_description) %>%
+  summarise(n=n()) %>%
+  drop_na(series_description, n) %>%
+  pivot_wider(names_from = series_description, values_from=n)
+
+golden_seqinfos <- wide_seqinfos %>%
+  filter(patient_id == golden_id) %>%
+  select_if(~all(!is.na(.))) %>%
+  ungroup()
+
+wide_seqinfos <- wide_seqinfos %>%
+  select(tidyselect::any_of(names(golden_seqinfos))) %>%
+  ungroup()
+
+compare_rows <- function(test, golden=golden_seqinfos){
+  
+  comps <- test == select(golden, -patient_id)
+  comps_df <- comps %>%
+    as_tibble() %>%
+    mutate(Complete = all(comps)) %>%
+    mutate_all(function(x) ifelse(x, paste0(emo::ji('check'), " complete"), paste0(emo::ji('x'), ' incomplete'))) %>%
+    select(Complete, everything())
+
+  return(comps_df)
+  
+}
+
+comparisons <- wide_seqinfos %>%
+  filter(patient_id != golden_id) %>%
+  group_by(patient_id) %>%
+  nest() %>%
+  mutate(result = map(data, compare_rows)) %>%
+  unnest(result) %>%
+  select(-data) #%>%
+  #rename('Complete compared to {golden_id}' := Complete)
+
+comparisons %>%
+  ungroup() %>%
+  left_join(select(jobs, subject, session), by = c("patient_id" = "subject")) %>%
+  select(subject=patient_id, session, everything()) %>%
+  mutate_if(is.character, as.factor) %>%
+  ungroup() %>%
+  distinct() %>%
+  datatable(., filter = 'top', extensions = 'FixedColumns',
+    options = list(
+    dom = 't',
+    scrollX = TRUE,
+    scrollCollapse = TRUE
+    )
+  )
+```
+
+## Gear Runs
+
+```{r}
+wide_jobs <- jobs %>%
+  filter(run_status == 'complete') %>%
+  select(gear_name, subject, session, run_datetime, run_status) %>%
+  group_by(subject, session, gear_name) %>%
+  arrange(run_datetime) %>%
+  slice(1) %>%
+  ungroup()
+
+jobs_order <- wide_jobs %>% 
+  filter(subject==golden_id) %>%
+  arrange(run_datetime) %>%
+  pull(gear_name)
+
+wide_jobs <- wide_jobs %>%
+  group_by(subject, session, gear_name) %>%
+  summarise(n=n()) %>%
+  pivot_wider(names_from = gear_name, values_from=n)
+
+golden_jobs <- wide_jobs %>%
+  filter(subject == golden_id) %>%
+  select_if(~all(!is.na(.))) %>%
+  ungroup()
+
+wide_jobs <- wide_jobs %>%
+  select(tidyselect::any_of(names(golden_jobs))) %>%
+  ungroup()
+
+compare_rows <- function(test, golden=golden_jobs){
+
+  comps <- test == select(golden, -subject, -session)
+  comps[is.na(comps)] = FALSE
+  comps_df <- comps %>%
+    as_tibble() %>%
+    mutate(Complete = all(comps)) %>%
+    mutate_all(function(x) ifelse(x, paste0(emo::ji('check'), " complete"), paste0(emo::ji('x'), ' incomplete'))) %>%
+    select(Complete, everything())
+
+  return(comps_df)
+
+}
+
+comparisons <- wide_jobs %>%
+  group_by(subject, session) %>%
+  nest() %>%
+  mutate(result = map(data, compare_rows)) %>%
+  unnest(result) %>%
+  select(-data) %>%
+  select(subject, session, all_of(jobs_order)) #%>%
+  #rename('Complete compared to {golden_id}' := Complete)
+
+jobs_order <- paste0('`',jobs_order, '`') %>%
+  paste0(., collapse=emo::ji('arrow_right'))
+```
+
+The following table displays all the available gear runs collected from subject ``r params$golden`` as columns. Rows represent each other subject in the project and denote whether they have had the same gear run successfully. Filters in the column header can be used for quick inspection.
+
+Note that runs order from left to right (`r paste0(jobs_order, collapse=emo::ji('arrow_right'))`).
+
+
+```{r}
+comparisons %>%
+  ungroup() %>%
+  mutate_if(is.character, as.factor) %>%
+  ungroup() %>%
+  distinct() %>%
+  datatable(., filter = 'top', extensions = 'FixedColumns',
+    options = list(
+    dom = 't',
+    scrollX = TRUE,
+    scrollCollapse = TRUE
+    )
+  )
+```
+
+# {-}
 
 # Workflow of Curation & Analysis Gears
 
@@ -390,17 +573,11 @@ if(!is.list(workflow)){
 }
 ```
 
-# Attachments
-
-There are `r nrow(attachments)` attachments for a total of `r humanReadable(sum(attachments$Size_kb), width=4, standard = "SI")` of data.
-```{r, echo=FALSE}
-attachments %>%
-  ggplot(aes(x=Type)) +
-  geom_bar(aes(fill = Origin_Level), alpha = 0.5) +
-  theme_minimal(base_size = 18) +
-  scale_fill_viridis_d() +
-  labs(title = "Attachments Count")# +
-  #facet_wrap(~gear_name, scales = "free")
-```
 
 ---
+
+
+
+
+
+
