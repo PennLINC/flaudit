@@ -19,14 +19,14 @@ knitr::opts_chunk$set(echo = FALSE, fig.width=16, fig.height=12)
 
 ```{r, include = FALSE, echo = FALSE}
 if (!require("pacman")) install.packages("pacman")
-if (!require("remotes")) install.packages("remotes")
+#if (!require("remotes")) install.packages("remotes")
 i <- 1
-packs <- c('DT', 'dplyr', 'stringr', 'ggplot2', 'tidyr', 'purrr', 'knitr', 'scales', 'ggrepel', 'wordcloud', 'naniar', 'gdata', 'lubridate', 'collapsibleTree', 'jsonlite', 'data.table', 'readr')
+packs <- c('DT', 'dplyr', 'stringr', 'ggplot2', 'tidyr', 'purrr', 'knitr', 'scales', 'ggrepel', 'wordcloud', 'naniar', 'gdata', 'lubridate', 'collapsibleTree', 'jsonlite', 'data.table', 'readr', 'emo')
 
-pacman::p_load(DT, dplyr, stringr, ggplot2, tidyr, purrr, knitr, scales, ggrepel, wordcloud, naniar, gdata, lubridate, collapsibleTree, jsonlite, data.table, readr)
+pacman::p_load(DT, dplyr, stringr, ggplot2, tidyr, purrr, knitr, scales, ggrepel, wordcloud, naniar, gdata, lubridate, collapsibleTree, jsonlite, data.table, readr, emo)
 
-install.packages('visdat', 'rlang', 'glue')
-remotes::install_github("njtierney/naniar", dependencies = TRUE)
+#install.packages('visdat', 'rlang', 'glue')
+#remotes::install_github("njtierney/naniar", dependencies = TRUE)
 # for(x in packs){
 #   print(i)
 #   print(x)
