@@ -9,9 +9,8 @@ params:
   attachments_csv: "/flywheel/v0/output/attachments.csv"
   seqinfo_csv: "/flywheel/v0/output/seqinfo.csv"
   bids_csv: "/flywheel/v0/output/bids.csv"
-  workflow_json: "/flywheel/v0/input/workflow/workflow.json"
   jobs_csv: "/flywheel/v0/output/jobs.csv"
-  golden: ""
+  template: ""
 ---
 
 ```{r, include = FALSE, echo = FALSE, cache = FALSE}
@@ -19,32 +18,30 @@ knitr::opts_chunk$set(echo = FALSE, fig.width=16, fig.height=12)
 ```
 
 ```{r, include = FALSE, echo = FALSE}
-install.packages('DT')
-library(DT)
-library(dplyr)
-library(stringr)
-library(ggplot2)
-library(tidyr)
-library(purrr)
-library(knitr)
-library(scales)
-library(ggrepel)
-library(wordcloud)
-library(naniar)
-library(gdata)
-library(lubridate)
-library(collapsibleTree)
-library(ggalluvial)
-library(networkD3)
-library(jsonlite)
-library(data.table)
-library(readr)
+if (!require("pacman")) install.packages("pacman")
+if (!require("remotes")) install.packages("remotes")
+i <- 1
+packs <- c('DT', 'dplyr', 'stringr', 'ggplot2', 'tidyr', 'purrr', 'knitr', 'scales', 'ggrepel', 'wordcloud', 'naniar', 'gdata', 'lubridate', 'collapsibleTree', 'jsonlite', 'data.table', 'readr')
+
+pacman::p_load(DT, dplyr, stringr, ggplot2, tidyr, purrr, knitr, scales, ggrepel, wordcloud, naniar, gdata, lubridate, collapsibleTree, jsonlite, data.table, readr)
+
+install.packages('visdat', 'rlang', 'glue')
+remotes::install_github("njtierney/naniar", dependencies = TRUE)
+# for(x in packs){
+#   print(i)
+#   print(x)
+#   if(!require(x)){
+#     install.packages(x)
+#   }
+#   pacman::p_load(x)
+#   i <- i+1
+# }
 
 ggplot_base <- 18
 ```
 
 ```{r, include = FALSE, echo = FALSE}
-library(here)
+#library(here)
 attachments <- #here('data', 'grmpy', 'attachments.csv') %>% 
   params$attachments_csv %>%
   read_csv() %>%
@@ -64,29 +61,23 @@ bids <- #here('data', 'grmpy', 'bids.csv') %>%
   params$bids_csv %>%
   read_csv()
 
-if(file.exists(params$workflow_json)){
-  workflow <- fromJSON(params$workflow_json)
-} else {
-  workflow <- NA
-}
-
 if(nrow(seqinfo) < 1){
   stop("Seqinfo table is empty!")
 }
 
-if(params$golden == '') {
+if(params$template == '') {
   
   warning('Template subject not given, using first subject')
   golden_id <- seqinfo$patient_id[0]
   
-} else if(!(params$golden %in% seqinfo$patient_id)) {
+} else if(!(params$template %in% seqinfo$patient_id)) {
   
   warning('Template subject not found in project, using first subject')
   golden_id <- seqinfo$patient_id[0]
   
 } else {
   
-  golden_id <- params$golden
+  golden_id <- params$template
   
 }
 ```
@@ -123,9 +114,10 @@ datatable(sequences)
 
 We visualise the above frequencies below:
 
+
 ```{r, echo = FALSE}
 ggplot(sequences, aes(x = series_description, y = Freq))+
-  geom_col() +
+  geom_bar(stat = 'identity') +
   coord_flip() +
   theme_minimal(base_size = ggplot_base) +
   labs(title = "Raw Frequencies of Sequences in the Project", x = "Sequence Name")
@@ -162,7 +154,7 @@ for(i in 1:length(ids)){
 
 output_df %>%
   mutate_all(.funs = function(x) ifelse(x == 0, NA, x)) %>%
-  gg_miss_var(show_pct = TRUE) +
+  naniar::gg_miss_var(show_pct = TRUE) +
   labs(x = "Sequence") +
   theme_minimal(base_size = ggplot_base)
 ```
@@ -196,7 +188,7 @@ seqinfo %>%
   )
 ```
 
-## Gears and Jobs
+## Gears Runs & Jobs
 
 There have been `r length(unique(jobs$job_id))` gears run in total, for a total runtime of `r as.character(lubridate::as.duration(sum(jobs$run_runtime_ms)/1000))`. The most commonly run gear is ``r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(gear_name) %>% .[1]`` with a total of `r jobs %>% group_by(gear_name) %>% summarise(n = n()) %>% arrange(-n) %>% pull(n) %>% .[1]` runs. The gear with the most version increments is ``r jobs %>% group_by(gear_name) %>% summarise(n = n_distinct(gear_version)) %>% arrange(-n) %>% pull(gear_name) %>% .[1]``.
 
@@ -281,11 +273,11 @@ attachments %>%
 
 # Project Completion {.tabset .tabset-pills}
 
-Using subject ``r params$golden`` as the project template, the following sections show project completeness in terms of sequence collection and preprocessing/analysis gear runs.
+Using subject ``r golden_id`` as the project template, the following sections describe the project's completeness in comparison to the template subject.
 
 ## Sequences
 
-The following table displays all the available sequences collected from subject ``r params$golden`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of sequences as the template subject. Filters in the column header can be used for quick inspection.
+The following table displays all the available *scanning sequences* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of sequences as the template subject. Filters in the column header can be used for quick inspection.
 
 ```{r}
 wide_seqinfos <- seqinfo %>%
@@ -342,7 +334,78 @@ comparisons %>%
   )
 ```
 
-## Gear Runs
+## BIDS Curation
+
+The following table displays all the available *BIDS data* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of BIDS files as the template subject. Filters in the column header can be used for quick inspection.
+
+```{r}
+full_bids <- seqinfo %>%
+  # group_by(patient_id, session_id, series_description) %>%
+  # slice(1) %>%
+  # ungroup() %>%
+  select(patient_id, session_id, series_id, series_description) %>%
+  distinct() %>%
+  filter(complete.cases(.)) %>%
+  left_join(distinct(bids), by = c("session_id", "series_id")) %>%
+  mutate(
+    bids_name = str_replace_all(Filename, "sub-[^_]+(?=_)", "\\{subject\\}"),
+    bids_name = str_replace_all(bids_name, "ses-[^_]+(?=_)", "\\{session\\}")
+  ) %>%
+  rename(subject=patient_id, session=session_id)
+
+golden_bids <- full_bids %>%
+  filter(subject == golden_id, !is.na(bids_name)) %>%
+  group_by(subject, session, bids_name) %>%
+  summarise(n=n()) %>%
+  pivot_wider(names_from = bids_name, values_from=n) %>%
+  ungroup()
+
+wide_bids <- full_bids %>%
+  filter(!is.na(bids_name)) %>%
+  group_by(subject, session, bids_name) %>%
+  summarise(n=n()) %>%
+  pivot_wider(names_from = bids_name, values_from=n) %>%
+  select(tidyselect::any_of(names(golden_bids))) %>%
+  ungroup()
+
+compare_rows <- function(test, golden=golden_bids){
+
+  comps <- test == select(golden, -subject, -session)
+  comps[is.na(comps)] = FALSE
+  comps_df <- comps %>%
+    as_tibble() %>%
+    mutate(Complete = all(comps)) %>%
+    mutate_all(function(x) ifelse(x, paste0(emo::ji('check'), " complete"), paste0(emo::ji('x'), ' incomplete'))) %>%
+    select(Complete, everything())
+
+  return(comps_df)
+
+}
+
+comparisons <- wide_bids %>%
+  group_by(subject, session) %>%
+  nest() %>%
+  mutate(result = map(data, compare_rows)) %>%
+  unnest(result) %>%
+  select(-data) %>%
+  select(subject, session, Complete, all_of(names(golden_bids)))
+
+comparisons %>%
+  ungroup() %>%
+  mutate_if(is.character, as.factor) %>%
+  ungroup() %>%
+  distinct() %>%
+  datatable(., filter = 'top', extensions = 'FixedColumns',
+    options = list(
+    dom = 't',
+    scrollX = TRUE,
+    scrollCollapse = TRUE
+    )
+  )
+```
+
+
+## Gear Runs & Jobs
 
 ```{r}
 wide_jobs <- jobs %>%
@@ -392,14 +455,14 @@ comparisons <- wide_jobs %>%
   mutate(result = map(data, compare_rows)) %>%
   unnest(result) %>%
   select(-data) %>%
-  select(subject, session, all_of(jobs_order)) #%>%
+  select(subject, session, Complete, all_of(jobs_order)) #%>%
   #rename('Complete compared to {golden_id}' := Complete)
 
 jobs_order <- paste0('`',jobs_order, '`') %>%
   paste0(., collapse=emo::ji('arrow_right'))
 ```
 
-The following table displays all the available gear runs collected from subject ``r params$golden`` as columns. Rows represent each other subject in the project and denote whether they have had the same gear run successfully. Filters in the column header can be used for quick inspection.
+The following table displays all the available *gear runs* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have had the same gear run successfully. Filters in the column header can be used for quick inspection.
 
 Note that runs order from left to right (`r paste0(jobs_order, collapse=emo::ji('arrow_right'))`).
 
@@ -420,164 +483,4 @@ comparisons %>%
 ```
 
 # {-}
-
-# Workflow of Curation & Analysis Gears
-
-Below, the Sankey Diagram illustrates the workflow of gear runs in your project `r params$project_name`. Hover over the diagram for enumerations of sessions at each node/transition.
-
-```{r, message = FALSE, warning = FALSE, echo = FALSE, fig.width=10, fig.height=7}
-# create nodes for each gear
-
-gear_nodes <- jobs %>%
-  group_by(gear_name) %>%
-  summarise(n = n()) %>%
-  mutate(node = 0:(nrow(.)-1)) %>%
-  select(name = gear_name, node) %>%
-  as.data.frame()
-
-# create edges
-
-create_to_and_from <- function(df){
-
-  if(nrow(df) <= 1){
-
-    return(NA)
-  }
-
-  else{
-
-    top <- 1
-    bottom <- top + 1
-    end <- nrow(df)
-
-    from_to <- list()
-
-    while(bottom <= end){
-
-      #print(slice(df, top:bottom))
-      row <- c(
-        as.character(df[top, 'gear_name']),
-        as.character(df[bottom, 'gear_name'])
-        )
-      from_to[[top]] <- row
-
-      top <- top + 1
-      bottom <- bottom + 1
-    }
-
-    out_df <- do.call('rbind', from_to) %>%
-      as.data.frame(stringsAsFactors = FALSE)
-
-    names(out_df) <- c("from", "to")
-
-    return(out_df)
-  }
-}
-
-gear_edges <- jobs %>%
-  filter(run_status == "complete") %>%
-  select(subject, session, gear_name, run_datetime) %>%
-  group_by(subject, session, gear_name) %>%
-  slice(1) %>%
-  ungroup() %>%
-  group_by(subject, session) %>%
-  arrange(subject, session, run_datetime) %>%
-  mutate(index = 1:n()) %>%
-  nest() %>%
-  mutate(from_to = map(data, create_to_and_from)) %>%
-  unnest(from_to) %>%
-  #filter(!is.na(rel)) %>%
-  ungroup() %>%
-  group_by(from, to) %>%
-  summarise(n = n()) %>%
-  ungroup() %>%
-  drop_na()
-
-gear_edges <- gear_edges %>%
-  mutate(fromID = match(gear_edges$from, gear_nodes$name) - 1,
-         toID = match(gear_edges$to, gear_nodes$name) - 1) %>%
-  as.data.frame()
-
-sankeyNetwork(Links = gear_edges, Nodes = gear_nodes, Source = "fromID", Target = "toID", Value = "n", fontSize = 18)
-```
-
-The Sankey Diagram Below illustrates your ideal workflow for the project, and enumerates how many sessions have been through the workflow specified in your workflow spec:
-
-```{r, echo = FALSE, message=FALSE, warning = FALSE, fig.width=10, fig.height=7}
-# get the workflow into a dataframe
-if(!is.list(workflow)){
-  print("No workflow document supplied!")
-} else {
-  
-  stages <- names(workflow)
-
-  workflow_df <- data.frame()
-  
-  for(s in stages){
-  
-    tempdf <- workflow[[s]] %>%
-      as.data.frame(stringsAsFactors = FALSE) %>%
-      mutate(stage = s, requires = ifelse(requires == "", NA, requires))
-  
-    workflow_df <- rbind(workflow_df, tempdf)
-  
-  }
-  
-  # > workflow_df
-  #             gear_name position          type          requires         stage
-  # 1        fw-heudiconv        1      curation                    fw-heudiconv
-  # 2         fmriprep-fw        3 preprocessing                        fmriprep
-  # 3          qsiprep-fw        4 preprocessing         ABCD_dMRI       qsiprep
-  # 4          qsiprep-fw        4 preprocessing ABCD_T1w_MPR_vNav       qsiprep
-  # 5 scale-info-uploader        2      curation                   clinical_data
-  # 6         qsirecon-fw        5 preprocessing                        qsirecon
-  
-  # gear nodes
-  gear_nodes2 <- workflow_df %>%
-    select(name = gear_name, node = position, group = type) %>%
-    mutate(node = node-1)
-  
-  # gear edges
-  ordered_jobs <- jobs %>%
-    filter(run_status == "complete") %>%
-    select(subject, session, gear_name, run_datetime) %>%
-    group_by(subject, session, gear_name) %>%
-    slice(1) %>%
-    ungroup() %>%
-    group_by(subject, session) %>%
-    arrange(subject, session, run_datetime) %>%
-    mutate(index = 1:n()) %>%
-    ungroup()
-  
-  gear_edges2 <- ordered_jobs %>%
-    group_by(subject, session) %>%
-    nest() %>%
-    mutate(data = map(data, .f = function(x) left_join(workflow_df, x, by = 'gear_name'))) %>%
-    mutate(data = map(data, .f = function(x) filter(x, index != 0))) %>%
-    mutate(from_to = map(data, create_to_and_from)) %>%
-    unnest(from_to) %>%
-    #filter(!is.na(rel)) %>%
-    ungroup() %>%
-    group_by(from, to) %>%
-    summarise(n = n()) %>%
-    ungroup() %>%
-    drop_na()
-  
-  gear_edges2 <- gear_edges2 %>%
-    mutate(fromID = match(gear_edges2$from, gear_nodes2$name) - 1,
-           toID = match(gear_edges2$to, gear_nodes2$name) - 1) %>%
-    as.data.frame()
-  
-  sankeyNetwork(Links = gear_edges2, Nodes = gear_nodes2, Source = "fromID", Target = "toID", Value = "n", NodeGroup = "group", fontSize = 18)
-
-}
-```
-
-
----
-
-
-
-
-
 

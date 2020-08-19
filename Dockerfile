@@ -31,7 +31,27 @@ RUN pip install --no-cache fw-heudiconv
 
 # install necessary packages for R
 
-RUN Rscript -e "install.packages(c('DT', 'dplyr', 'stringr', 'tidyr', 'ggplot2', 'purrr', 'rmarkdown', 'knitr', 'scales', 'ggrepel', 'wordcloud', 'naniar', 'gdata', 'lubridate', 'collapsibleTree', 'ggalluvial', 'networkD3', 'data.table'), repos = 'http://cran.us.r-project.org')"
+#RUN Rscript -e "install.packages(c('DT', 'dplyr', 'stringr', 'tidyr', 'ggplot2', 'purrr', 'rmarkdown', 'knitr', 'scales', 'ggrepel', 'wordcloud', 'naniar', 'gdata', 'lubridate', 'collapsibleTree', 'ggalluvial', 'networkD3', 'data.table'), repos = 'http://cran.us.r-project.org', dependencies=TRUE)"
+
+#RUN install2.r --skipinstalled --error \
+#    DT \
+#    dplyr \
+#    stringr \
+#    tidyr \
+#    ggplot2 \
+#    purrr \
+#    rmarkdown \
+#    knitr \
+#    scales \
+#    ggrepel \
+#    wordcloud \
+#    naniar \
+#    gdata \
+#    lubridate \
+#    collapsibleTree \
+#    ggalluvial \
+#    networkD3 \
+#    data.table
 
 # Copy necessary files
 

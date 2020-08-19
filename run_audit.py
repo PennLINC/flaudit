@@ -31,14 +31,14 @@ with flywheel.GearContext() as context:
     project_container = fw.get(parent_container.id)
     project_label = project_container.label
 
-    workflow = context.get_input_path('workflow')
+    template = context.get_input('Template')
 
     call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/".format(project_label.replace(" ", "\ "))
     logger.info("Attempting to gather data with call:\n\t" + call1)
     call1 = call1 + " --api-key " + api_key
     os.system(call1)
 
-    call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/flaudit/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv', bids_csv = '/flywheel/v0/output/bids.csv', workflow_json = '{}'))\"".format(project_label, workflow)
+    call2 = "R -e \"rmarkdown::render(input = '/flywheel/v0/flaudit/R/AuditReport.Rmd', output_dir = '/flywheel/v0/output/', params = list(project_name = '{}', attachments_csv = '/flywheel/v0/output/attachments.csv', seqinfo_csv = '/flywheel/v0/output/seqinfo.csv', jobs_csv = '/flywheel/v0/output/jobs.csv', bids_csv = '/flywheel/v0/output/bids.csv', template = '{}'))\"".format(project_label, template)
     logger.info("Building audit report with call:\n\t" + call2)
     os.system(call2)
 
