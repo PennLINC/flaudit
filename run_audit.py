@@ -31,7 +31,7 @@ with flywheel.GearContext() as context:
     project_container = fw.get(parent_container.id)
     project_label = project_container.label
 
-    template = context.get_input('Template')
+    template = config.get('Template', '')
 
     call1 = "python /flywheel/v0/flaudit/cli/gather_data.py --project {} --destination /flywheel/v0/output/".format(project_label.replace(" ", "\ "))
     logger.info("Attempting to gather data with call:\n\t" + call1)

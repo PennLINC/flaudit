@@ -41,43 +41,38 @@ ggplot_base <- 18
 ```
 
 ```{r, include = FALSE, echo = FALSE}
-#library(here)
-attachments <- #here('data', 'grmpy', 'attachments.csv') %>% 
-  params$attachments_csv %>%
+library(here)
+attachments <- here('data', 'datatest', 'attachments.csv') %>% 
+  #params$attachments_csv %>%
   read_csv() %>%
   filter(!str_detect(Type, "bvec|bval")) %>%
   filter(!(str_detect(Name, "json") & str_detect(Origin_Level, "Acquisition")))
 
-seqinfo <- #here('data', 'grmpy', 'seqinfo.csv') %>% 
-  params$seqinfo_csv %>%
-  read_csv()# %>%
+seqinfo <- here('data', 'datatest', 'seqinfo.csv') %>% 
+  #params$seqinfo_csv %>%
+  read_csv(col_types = cols(patient_id=col_character(), session_id=col_character()))# %>%
   #filter(!is.na(series_description))
 
-jobs <- #here('data', 'grmpy', 'jobs.csv') %>% 
-  params$jobs_csv %>%
-  read_csv()
+jobs <- here('data', 'datatest', 'jobs.csv') %>% 
+  #params$jobs_csv %>%
+  read_csv(col_types = cols(subject=col_character(), session=col_character()))
 
-bids <- #here('data', 'grmpy', 'bids.csv') %>% 
-  params$bids_csv %>%
-  read_csv()
+bids <- here('data', 'datatest',  'bids.csv') %>% 
+  #params$bids_csv %>%
+  read_csv(col_types = cols(session_id=col_character()))
 
 if(nrow(seqinfo) < 1){
   stop("Seqinfo table is empty!")
 }
 
-if(params$template == '') {
+if(params$template == '' | !(as.character(params$template) %in% seqinfo$patient_id)) {
   
   warning('Template subject not given, using first subject')
-  golden_id <- seqinfo$patient_id[0]
-  
-} else if(!(params$template %in% seqinfo$patient_id)) {
-  
-  warning('Template subject not found in project, using first subject')
-  golden_id <- seqinfo$patient_id[0]
+  golden_id <- as.character(seqinfo$patient_id[1])
   
 } else {
   
-  golden_id <- params$template
+  golden_id <- as.character(params$template)
   
 }
 ```
@@ -98,7 +93,7 @@ if(params$template == '') {
 
 Here's a list of all the sequences in `r params$project_name`:
 
-```{r, warning=FALSE, echo=FALSE}
+```{r, warning=FALSE, echo=FALSE, message=FALSE}
 sequences <- seqinfo %>%
   group_by(series_description) %>%
   summarise(Freq = n()) %>%
@@ -162,7 +157,7 @@ output_df %>%
 ## BIDS Curation
 The tree diagram below shows how each sequence has been curated into BIDS format. The leaf at the end of each branch counts how many subjects have files that fall under each BIDS template.
 
-```{r, echo = FALSE, message=FALSE}
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
 seqinfo %>%
   # group_by(patient_id, session_id, series_description) %>%
   # slice(1) %>%
@@ -194,7 +189,7 @@ There have been `r length(unique(jobs$job_id))` gears run in total, for a total 
 
 Here are the raw counts of complete gear runs, using only the most recent version and run of each gear:
 
-```{r, echo = FALSE}
+```{r, echo = FALSE, message=FALSE, warning=FALSE}
 jobs %>%
   filter(run_status == "complete") %>%
   group_by(subject, session, gear_name) %>%
@@ -214,7 +209,7 @@ jobs %>%
 
 Here are the gear completion statistics:
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 jobs_plot <- jobs %>%
   # mutate(run_status = factor(run_status)) %>%
   group_by(job_id) %>%
@@ -244,7 +239,7 @@ jobs_plot
 
 Below are the runtimes of gear runs:
 
-```{r, echo=FALSE}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 jobs %>%
   mutate(run_runtime_ms = run_runtime_ms/1000/60) %>%
   #group_by(gear_name) %>%
@@ -277,9 +272,7 @@ Using subject ``r golden_id`` as the project template, the following sections de
 
 ## Sequences
 
-The following table displays all the available *scanning sequences* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of sequences as the template subject. Filters in the column header can be used for quick inspection.
-
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 wide_seqinfos <- seqinfo %>%
   select(series_description, patient_id) %>%
   group_by(patient_id, series_description) %>%
@@ -294,7 +287,8 @@ golden_seqinfos <- wide_seqinfos %>%
 
 wide_seqinfos <- wide_seqinfos %>%
   select(tidyselect::any_of(names(golden_seqinfos))) %>%
-  ungroup()
+  ungroup() %>%
+  mutate_if(is.numeric, ~replace(., is.na(.), 0))
 
 compare_rows <- function(test, golden=golden_seqinfos){
   
@@ -318,6 +312,34 @@ comparisons <- wide_seqinfos %>%
   select(-data) #%>%
   #rename('Complete compared to {golden_id}' := Complete)
 
+
+```
+
+Compared to the template subject, the following chart visualizes the completion of sequences in other participants.
+
+```{r, fig.width=16, fig.height=8}
+comparisons %>% 
+  ungroup() %>%
+  gather(key='Sequence', value='value', -patient_id) %>%
+  select(-patient_id) %>%
+  count(Sequence, value) %>%
+  group_by(Sequence) %>%
+  mutate(perc = n/sum(n)*100) %>%
+  ungroup() %>%
+  mutate(Sequence = relevel(as.factor(Sequence), "Complete")) %>%
+  mutate(Sequence = recode(Sequence, Complete = "All_Sequences", .default = levels(Sequence))) %>%
+  ggplot(aes(x=Sequence, y=perc)) +
+  geom_col(aes(fill=value), alpha = 0.5, position='stack') +
+  theme_minimal(base_size = 18) + 
+  coord_flip() +
+  theme(axis.title.y = element_text(angle = 0)) +
+  scale_fill_viridis_d() +
+  labs(title = "Sequence Completion", y = "Percent of Subjects")
+```
+
+The following table displays all the available *scanning sequences* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of sequences as the template subject. Filters in the column header can be used for quick inspection.
+
+``` {r, echo = FALSE, include=TRUE}
 comparisons %>%
   ungroup() %>%
   left_join(select(jobs, subject, session), by = c("patient_id" = "subject")) %>%
@@ -327,18 +349,20 @@ comparisons %>%
   distinct() %>%
   datatable(., filter = 'top', extensions = 'FixedColumns',
     options = list(
-    dom = 't',
-    scrollX = TRUE,
-    scrollCollapse = TRUE
+      pageLength = 5,
+      lengthMenu = list(c(5, 10, 15, -1), c("5", "10", "15", "All")),
+      scrollX = TRUE,
+      scrollY = "400px",
+      scrollCollapse = TRUE
     )
   )
 ```
 
+
 ## BIDS Curation
 
-The following table displays all the available *BIDS data* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of BIDS files as the template subject. Filters in the column header can be used for quick inspection.
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 full_bids <- seqinfo %>%
   # group_by(patient_id, session_id, series_description) %>%
   # slice(1) %>%
@@ -389,31 +413,62 @@ comparisons <- wide_bids %>%
   unnest(result) %>%
   select(-data) %>%
   select(subject, session, Complete, all_of(names(golden_bids)))
+```
 
+Compared to the template subject, the following chart visualizes the completion of BIDS curation in other participants.
+
+```{r, fig.width=16, fig.height=8}
+comparisons %>% 
+  ungroup() %>%
+  gather(key='File', value='value', -subject, -session) %>%
+  select(-subject, -session) %>%
+  count(File, value) %>%
+  group_by(File) %>%
+  mutate(perc = n/sum(n)*100) %>%
+  ungroup() %>%
+  mutate(File = relevel(as.factor(File), "Complete")) %>%
+  mutate(File = recode(File, Complete = "All_Files", .default = levels(File))) %>%
+  ggplot(aes(x=File, y=perc)) +
+  geom_col(aes(fill=value), alpha = 0.5, position='stack') +
+  theme_minimal(base_size = 18) + 
+  coord_flip() +
+  theme(axis.title.y = element_text(angle = 0)) +
+  scale_fill_viridis_d() +
+  labs(title = "BIDS Completion", y = "Percent of Subjects")
+```
+
+The following table displays all the available *BIDS data* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have the correct number of BIDS files as the template subject. Filters in the column header can be used for quick inspection.
+
+```{r}
 comparisons %>%
   ungroup() %>%
   mutate_if(is.character, as.factor) %>%
   ungroup() %>%
-  distinct() %>%
+  #distinct() %>%
   datatable(., filter = 'top', extensions = 'FixedColumns',
     options = list(
-    dom = 't',
-    scrollX = TRUE,
-    scrollCollapse = TRUE
+      pageLength = 5,
+      lengthMenu = list(c(5, 10, 15, -1), c("5", "10", "15", "All")),
+      scrollX = TRUE,
+      scrollY = "400px",
+      scrollCollapse = TRUE
     )
   )
 ```
 
 
+
+
 ## Gear Runs & Jobs
 
-```{r}
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
 wide_jobs <- jobs %>%
   filter(run_status == 'complete') %>%
-  select(gear_name, subject, session, run_datetime, run_status) %>%
+  select(gear_name, gear_version, subject, session, run_datetime, run_status) %>%
   group_by(subject, session, gear_name) %>%
-  arrange(run_datetime) %>%
+  arrange(desc(run_datetime), gear_version) %>%
   slice(1) %>%
+  select(-gear_version) %>%
   ungroup()
 
 jobs_order <- wide_jobs %>% 
@@ -431,55 +486,94 @@ golden_jobs <- wide_jobs %>%
   select_if(~all(!is.na(.))) %>%
   ungroup()
 
-wide_jobs <- wide_jobs %>%
-  select(tidyselect::any_of(names(golden_jobs))) %>%
-  ungroup()
-
-compare_rows <- function(test, golden=golden_jobs){
-
-  comps <- test == select(golden, -subject, -session)
-  comps[is.na(comps)] = FALSE
-  comps_df <- comps %>%
-    as_tibble() %>%
-    mutate(Complete = all(comps)) %>%
-    mutate_all(function(x) ifelse(x, paste0(emo::ji('check'), " complete"), paste0(emo::ji('x'), ' incomplete'))) %>%
-    select(Complete, everything())
-
-  return(comps_df)
-
+if(nrow(golden_jobs) > 0){
+  wide_jobs <- wide_jobs %>%
+    select(tidyselect::any_of(names(golden_jobs))) %>%
+    ungroup()
+  
+  compare_rows <- function(test, golden=golden_jobs){
+    
+    comps <- test == select(golden, -subject, -session)
+    comps[is.na(comps)] = FALSE
+    comps_df <- comps %>%
+      as_tibble() %>%
+      mutate(Complete = all(comps)) %>%
+      mutate_all(function(x) ifelse(x, paste0(emo::ji('check'), " complete"), paste0(emo::ji('x'), ' incomplete'))) %>%
+      select(Complete, everything())
+  
+    return(comps_df)
+  
+  }
+  
+  comparisons <- wide_jobs %>%
+    group_by(subject, session) %>%
+    nest() %>%
+    mutate(result = map(data, compare_rows)) %>%
+    unnest(result) %>%
+    select(-data) %>%
+    select(subject, session, Complete, all_of(jobs_order)) #%>%
+    #rename('Complete compared to {golden_id}' := Complete)
+  
+  jobs_order <- paste0('`',jobs_order, '`') %>%
+    paste0(., collapse=emo::ji('arrow_right'))
+  
+  jobs_order <- paste0(jobs_order, collapse=emo::ji('arrow_right'))
+} else {
+  jobs_order <- 'No gear runs for this template subject'
+  comparisons <- NULL
+  message("Template subject had no gear runs to display")
 }
 
-comparisons <- wide_jobs %>%
-  group_by(subject, session) %>%
-  nest() %>%
-  mutate(result = map(data, compare_rows)) %>%
-  unnest(result) %>%
-  select(-data) %>%
-  select(subject, session, Complete, all_of(jobs_order)) #%>%
-  #rename('Complete compared to {golden_id}' := Complete)
+```
 
-jobs_order <- paste0('`',jobs_order, '`') %>%
-  paste0(., collapse=emo::ji('arrow_right'))
+Compared to the template subject, the following chart visualizes the completion of gears in other participants.
+
+```{r, fig.width=16, fig.height=8}
+if(!is.null(comparisons)){
+  comparisons %>% 
+    ungroup() %>%
+    gather(key='Gear', value='value', -subject, -session) %>%
+    select(-subject, -session) %>%
+    count(Gear, value) %>%
+    group_by(Gear) %>%
+    mutate(perc = n/sum(n)*100) %>%
+    ungroup() %>%
+    mutate(Gear = relevel(as.factor(Gear), "Complete")) %>%
+    mutate(Gear = recode(Gear, Complete = "All_Gears", .default = levels(Gear))) %>%
+    ggplot(aes(x=Gear, y=perc)) +
+    geom_col(aes(fill=value), alpha = 0.5, position='stack') +
+    theme_minimal(base_size = 18) + 
+    coord_flip() +
+    theme(axis.title.y = element_text(angle = 0)) +
+    scale_fill_viridis_d() +
+    labs(title = "Gear Completion", y = "Percent of Subjects")
+} else {
+  message("No data to show.")
+}
 ```
 
 The following table displays all the available *gear runs* collected from subject ``r golden_id`` as columns. Rows represent each other subject in the project and denote whether they have had the same gear run successfully. Filters in the column header can be used for quick inspection.
 
-Note that runs order from left to right (`r paste0(jobs_order, collapse=emo::ji('arrow_right'))`).
-
-
-```{r}
-comparisons %>%
-  ungroup() %>%
-  mutate_if(is.character, as.factor) %>%
-  ungroup() %>%
-  distinct() %>%
-  datatable(., filter = 'top', extensions = 'FixedColumns',
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+if(!is.null(comparisons)){
+  comparisons %>%
+    ungroup() %>%
+    mutate_if(is.character, as.factor) %>%
+    ungroup() %>%
+    distinct() %>%
+    datatable(., filter = 'top', extensions = 'FixedColumns',
     options = list(
-    dom = 't',
-    scrollX = TRUE,
-    scrollCollapse = TRUE
+      pageLength = 5,
+      lengthMenu = list(c(5, 10, 15, -1), c("5", "10", "15", "All")),
+      scrollX = TRUE,
+      scrollY = "400px",
+      scrollCollapse = TRUE
     )
   )
+} else {
+  message("No data to show.")
+}
+
 ```
 
 # {-}

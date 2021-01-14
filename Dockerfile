@@ -9,7 +9,6 @@ RUN export DEBIAN_FRONTEND=noninteractive; apt-get -y update \
 # Make directory for flywheel spec (v0)
 ENV FLYWHEEL /flywheel/v0
 RUN mkdir -p ${FLYWHEEL}
-COPY manifest.json ${FLYWHEEL}/manifest.json
 MAINTAINER Tinashe Tapera <taperat@pennmedicine.upenn.edu>
 
 # WE EXPORT PATH FOR CONDA
@@ -27,6 +26,7 @@ RUN apt-get install -y python3-pip python3-dev && pip3 install virtualenv \
 && ln -s /opt/conda/etc/profile.d/conda.sh /etc/profile.d/conda.sh \
 && echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
 
+RUN conda install -c anaconda python=3.8
 # ACTIVATE CONDA ENVIRONMENT
 RUN echo "source activate base" > ~/.bashrc
 
