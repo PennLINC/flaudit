@@ -42,23 +42,23 @@ ggplot_base <- 18
 
 ```{r, include = FALSE, echo = FALSE}
 library(here)
-attachments <- here('data', 'datatest', 'attachments.csv') %>% 
-  #params$attachments_csv %>%
+attachments <- #here('data', 'datatest', 'attachments.csv') %>%
+  params$attachments_csv %>%
   read_csv() %>%
   filter(!str_detect(Type, "bvec|bval")) %>%
   filter(!(str_detect(Name, "json") & str_detect(Origin_Level, "Acquisition")))
 
-seqinfo <- here('data', 'datatest', 'seqinfo.csv') %>% 
-  #params$seqinfo_csv %>%
-  read_csv(col_types = cols(patient_id=col_character(), session_id=col_character()))# %>%
-  #filter(!is.na(series_description))
+seqinfo <- #here('data', 'datatest', 'seqinfo.csv') %>%
+  params$seqinfo_csv %>%
+  read_csv(col_types = cols(patient_id=col_character(), session_id=col_character())) %>%
+  filter(!is.na(series_description))
 
-jobs <- here('data', 'datatest', 'jobs.csv') %>% 
-  #params$jobs_csv %>%
+jobs <- #here('data', 'datatest', 'jobs.csv') %>%
+  params$jobs_csv %>%
   read_csv(col_types = cols(subject=col_character(), session=col_character()))
 
-bids <- here('data', 'datatest',  'bids.csv') %>% 
-  #params$bids_csv %>%
+bids <- #here('data', 'datatest',  'bids.csv') %>%
+  params$bids_csv %>%
   read_csv(col_types = cols(session_id=col_character()))
 
 if(nrow(seqinfo) < 1){
@@ -66,14 +66,14 @@ if(nrow(seqinfo) < 1){
 }
 
 if(params$template == '' | !(as.character(params$template) %in% seqinfo$patient_id)) {
-  
+
   warning('Template subject not given, using first subject')
   golden_id <- as.character(seqinfo$patient_id[1])
-  
+
 } else {
-  
+
   golden_id <- as.character(params$template)
-  
+
 }
 ```
 
@@ -291,7 +291,7 @@ wide_seqinfos <- wide_seqinfos %>%
   mutate_if(is.numeric, ~replace(., is.na(.), 0))
 
 compare_rows <- function(test, golden=golden_seqinfos){
-  
+
   comps <- test == select(golden, -patient_id)
   comps_df <- comps %>%
     as_tibble() %>%
@@ -300,7 +300,7 @@ compare_rows <- function(test, golden=golden_seqinfos){
     select(Complete, everything())
 
   return(comps_df)
-  
+
 }
 
 comparisons <- wide_seqinfos %>%
@@ -318,7 +318,7 @@ comparisons <- wide_seqinfos %>%
 Compared to the template subject, the following chart visualizes the completion of sequences in other participants.
 
 ```{r, fig.width=16, fig.height=8}
-comparisons %>% 
+comparisons %>%
   ungroup() %>%
   gather(key='Sequence', value='value', -patient_id) %>%
   select(-patient_id) %>%
@@ -330,7 +330,7 @@ comparisons %>%
   mutate(Sequence = recode(Sequence, Complete = "All_Sequences", .default = levels(Sequence))) %>%
   ggplot(aes(x=Sequence, y=perc)) +
   geom_col(aes(fill=value), alpha = 0.5, position='stack') +
-  theme_minimal(base_size = 18) + 
+  theme_minimal(base_size = 18) +
   coord_flip() +
   theme(axis.title.y = element_text(angle = 0)) +
   scale_fill_viridis_d() +
@@ -418,7 +418,7 @@ comparisons <- wide_bids %>%
 Compared to the template subject, the following chart visualizes the completion of BIDS curation in other participants.
 
 ```{r, fig.width=16, fig.height=8}
-comparisons %>% 
+comparisons %>%
   ungroup() %>%
   gather(key='File', value='value', -subject, -session) %>%
   select(-subject, -session) %>%
@@ -430,7 +430,7 @@ comparisons %>%
   mutate(File = recode(File, Complete = "All_Files", .default = levels(File))) %>%
   ggplot(aes(x=File, y=perc)) +
   geom_col(aes(fill=value), alpha = 0.5, position='stack') +
-  theme_minimal(base_size = 18) + 
+  theme_minimal(base_size = 18) +
   coord_flip() +
   theme(axis.title.y = element_text(angle = 0)) +
   scale_fill_viridis_d() +
@@ -471,7 +471,7 @@ wide_jobs <- jobs %>%
   select(-gear_version) %>%
   ungroup()
 
-jobs_order <- wide_jobs %>% 
+jobs_order <- wide_jobs %>%
   filter(subject==golden_id) %>%
   arrange(run_datetime) %>%
   pull(gear_name)
@@ -490,9 +490,9 @@ if(nrow(golden_jobs) > 0){
   wide_jobs <- wide_jobs %>%
     select(tidyselect::any_of(names(golden_jobs))) %>%
     ungroup()
-  
+
   compare_rows <- function(test, golden=golden_jobs){
-    
+
     comps <- test == select(golden, -subject, -session)
     comps[is.na(comps)] = FALSE
     comps_df <- comps %>%
@@ -500,11 +500,11 @@ if(nrow(golden_jobs) > 0){
       mutate(Complete = all(comps)) %>%
       mutate_all(function(x) ifelse(x, paste0(emo::ji('check'), " complete"), paste0(emo::ji('x'), ' incomplete'))) %>%
       select(Complete, everything())
-  
+
     return(comps_df)
-  
+
   }
-  
+
   comparisons <- wide_jobs %>%
     group_by(subject, session) %>%
     nest() %>%
@@ -513,10 +513,10 @@ if(nrow(golden_jobs) > 0){
     select(-data) %>%
     select(subject, session, Complete, all_of(jobs_order)) #%>%
     #rename('Complete compared to {golden_id}' := Complete)
-  
+
   jobs_order <- paste0('`',jobs_order, '`') %>%
     paste0(., collapse=emo::ji('arrow_right'))
-  
+
   jobs_order <- paste0(jobs_order, collapse=emo::ji('arrow_right'))
 } else {
   jobs_order <- 'No gear runs for this template subject'
@@ -530,7 +530,7 @@ Compared to the template subject, the following chart visualizes the completion 
 
 ```{r, fig.width=16, fig.height=8}
 if(!is.null(comparisons)){
-  comparisons %>% 
+  comparisons %>%
     ungroup() %>%
     gather(key='Gear', value='value', -subject, -session) %>%
     select(-subject, -session) %>%
@@ -542,7 +542,7 @@ if(!is.null(comparisons)){
     mutate(Gear = recode(Gear, Complete = "All_Gears", .default = levels(Gear))) %>%
     ggplot(aes(x=Gear, y=perc)) +
     geom_col(aes(fill=value), alpha = 0.5, position='stack') +
-    theme_minimal(base_size = 18) + 
+    theme_minimal(base_size = 18) +
     coord_flip() +
     theme(axis.title.y = element_text(angle = 0)) +
     scale_fill_viridis_d() +
@@ -577,4 +577,3 @@ if(!is.null(comparisons)){
 ```
 
 # {-}
-

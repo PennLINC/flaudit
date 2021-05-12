@@ -2,7 +2,7 @@
 	"name": "flaudit",
 	"label": "Flaudit: Flywheel Audit",
 	"description": "Audit your Flywheel project for sequence completeness, BIDS curation summaries, gear and job runs, workflow completeness, and more.",
-	"version": "0.0.5_0.1.6",
+	"version": "0.0.5_0.1.7",
   "author": "Tinashe Michael Tapera",
 	"maintainer": "Tinashe Michael Tapera",
 	"cite": "",
@@ -13,11 +13,11 @@
   "custom": {
     "gear-builder": {
       "category": "analysis",
-      "image": "pennbbl/flaudit:0.0.5_0.1.6"
+      "image": "pennbbl/flaudit:0.0.5_0.1.7"
     },
     "flywheel":{"suite": "PennBBL"}
   },
-  
+
 	"inputs": {
 		"api_key": {
 			"base": "api-key"
